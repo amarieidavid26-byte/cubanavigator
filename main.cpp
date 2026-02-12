@@ -6,7 +6,6 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-#include <cmath>
 #include <string>
 #include <limits>
 #include <chrono>
@@ -305,15 +304,6 @@ string grosimeDrum(string tip) {
     return "2";
 }
 
-// Proiectie GPS -> SVG (padding 80px, viewBox 1200x500)
-double toX(double lon) {
-    return 80.0 + (lon - (-85.5)) / ((-74.0) - (-85.5)) * (1200.0 - 160.0);
-}
-
-double toY(double lat) {
-    return 80.0 + (23.8 - lat) / (23.8 - 19.5) * (500.0 - 160.0);
-}
-
 // ╔════════════════════════════════════════╗
 // ║        FUNCTII DE AFISARE             ║
 // ╚════════════════════════════════════════╝
@@ -448,10 +438,10 @@ void deschideHTML() {
 #endif
 }
 
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║   GENERARE HTML — Harta interactiva SVG a traseelor pe Cuba    ║
-// ║   traseuEvidentiiat: -1 = trasee multiple, >=0 = traseu unic   ║
-// ╚══════════════════════════════════════════════════════════════════╝
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║   GENERARE HTML — Harta Leaflet.js + OpenStreetMap a traseelor    ║
+// ║   traseuEvidentiiat: -1 = trasee multiple, >=0 = traseu unic      ║
+// ╚══════════════════════════════════════════════════════════════════════╝
 void genereazaHTML(string titlu, int traseuEvidentiiat) {
     ofstream fout("rezultat.html");
     if (!fout.is_open()) {
@@ -460,40 +450,6 @@ void genereazaHTML(string titlu, int traseuEvidentiiat) {
     }
 
     bool modMultiplu = (traseuEvidentiiat == -1);
-
-    // Conturul insulei Cuba (52 puncte)
-    const int NR_CONTUR = 52;
-    double conturLon[NR_CONTUR] = {
-        -84.95,-84.28,-83.70,-83.37,-82.80,-82.47,-82.10,-81.83,
-        -81.50,-81.17,-80.63,-80.25,-79.83,-79.47,-79.14,-78.80,
-        -78.43,-78.04,-77.67,-77.28,-76.84,-76.34,-75.83,-75.62,
-        -75.32,-74.88,-74.88,-75.10,-75.63,-76.15,-76.58,-77.02,
-        -77.52,-77.92,-78.25,-78.68,-79.18,-79.54,-79.92,-80.35,
-        -80.82,-81.25,-81.67,-81.93,-82.27,-82.60,-82.93,-83.35,
-        -83.76,-84.10,-84.50,-84.95
-    };
-    double conturLat[NR_CONTUR] = {
-        21.76,22.05,22.15,22.22,22.40,22.45,22.60,22.68,
-        23.00,23.05,23.10,22.96,22.87,22.75,22.58,22.40,
-        22.15,22.08,21.85,21.75,21.58,21.24,20.73,20.47,
-        20.12,20.04,19.97,19.88,19.97,20.10,20.28,20.45,
-        20.67,21.08,21.32,21.55,21.58,21.73,21.72,21.82,
-        21.92,22.10,22.22,22.07,22.20,22.07,22.08,22.00,
-        21.92,21.84,21.78,21.76
-    };
-
-    // Construim string-ul de puncte polygon
-    string polyPoints;
-    for (int i = 0; i < NR_CONTUR; i++)
-        polyPoints += fmt(toX(conturLon[i]), 1) + "," + fmt(toY(conturLat[i]), 1) + " ";
-
-    // Offset-uri etichete orase
-    double labelDx[NR_ORASE] = {-12, 10, 10, 10, -12, -12, 10, 10, 10, 10, -12, -12, 10, -12, 10};
-    double labelDy[NR_ORASE] = {-10, -10, 18, 5, 5, 18, -10, -10, -10, -10, 18, 5, 5, -10, 18};
-    string labelAnchor[NR_ORASE] = {
-        "end","start","start","start","end","end","start","start",
-        "start","start","end","end","start","end","start"
-    };
 
     // Culori pentru trasee multiple
     string culoriMultiple[5] = {"#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6"};
@@ -507,6 +463,8 @@ void genereazaHTML(string titlu, int traseuEvidentiiat) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cuba Navigator - Rezultat</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{
@@ -516,10 +474,9 @@ body{
 }
 .container{max-width:1300px;margin:0 auto;padding:20px}
 
-/* Animatii fade-in */
 @keyframes fadeDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes drawLine{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.8);opacity:0.3}}
 
 header{text-align:center;padding:30px 0 20px;animation:fadeDown 0.6s ease-out}
 header h1{
@@ -536,26 +493,25 @@ header p{font-size:1.05em;color:#64748b;letter-spacing:2px;text-transform:upperc
     padding:20px;margin-bottom:24px;position:relative;overflow:hidden;
     animation:fadeDown 0.8s ease-out;
 }
-.map-card svg{width:100%;height:auto;display:block;border-radius:8px}
+#map{width:100%;height:500px;border-radius:12px;border:2px solid #2a3a5c;z-index:0}
 
-/* Animatie traseu desenat progresiv */
-.route-line{
-    stroke-dasharray:var(--len);stroke-dashoffset:var(--len);
-    animation:drawLine 1.5s ease-out forwards;
-}
+/* Leaflet tooltip and popup dark theme */
+.leaflet-tooltip{background:rgba(22,33,62,0.92);color:#e2e8f0;border:1px solid #2a3a5c;font-size:11px;font-weight:bold;font-family:'Segoe UI',sans-serif;padding:3px 8px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+.leaflet-tooltip-top:before{border-top-color:rgba(22,33,62,0.92)}
+.leaflet-tooltip-bottom:before{border-bottom-color:rgba(22,33,62,0.92)}
+.leaflet-tooltip-left:before{border-left-color:rgba(22,33,62,0.92)}
+.leaflet-tooltip-right:before{border-right-color:rgba(22,33,62,0.92)}
+.leaflet-popup-content-wrapper{background:#16213e;color:#e0e0e0;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5)}
+.leaflet-popup-content{margin:10px 14px;font-size:13px;line-height:1.5}
+.leaflet-popup-tip{background:#16213e}
+.leaflet-control-layers{background:#16213e !important;color:#e0e0e0;border:1px solid #2a3a5c !important;border-radius:10px !important;box-shadow:0 4px 20px rgba(0,0,0,0.4) !important;padding:8px 12px !important}
+.leaflet-control-layers label{color:#cbd5e1;font-size:13px}
+.leaflet-control-layers-separator{border-top-color:#2a3a5c !important}
+.leaflet-control-zoom a{background:#16213e !important;color:#0ea5e9 !important;border-color:#2a3a5c !important}
+.leaflet-control-zoom a:hover{background:#1e3a5f !important}
 
-.legend{
-    position:absolute;top:30px;right:30px;
-    background:rgba(22,33,62,0.93);
-    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-    border:1px solid rgba(14,165,233,0.2);
-    border-radius:10px;padding:14px 18px;
-    box-shadow:0 4px 20px rgba(0,0,0,0.35);
-}
-.legend h4{color:#0ea5e9;margin-bottom:10px;font-size:0.82em;text-transform:uppercase;letter-spacing:1.5px}
-.legend-item{display:flex;align-items:center;margin-bottom:7px;font-size:0.84em;color:#cbd5e1}
-.legend-line{width:30px;height:4px;border-radius:2px;margin-right:10px;flex-shrink:0}
-.legend-dot{width:12px;height:12px;border-radius:50%;margin-right:10px;flex-shrink:0}
+/* Pulsating markers */
+.pulse-marker{border-radius:50%;animation:pulse 2.5s ease-in-out infinite}
 
 /* Stats panel */
 .stats-row{
@@ -617,16 +573,9 @@ footer{
 footer span{color:#0ea5e9}
 footer .sep{margin:0 8px;color:#2c3e50}
 
-/* Tooltip SVG */
-.city-group{cursor:pointer}
-.city-group:hover .city-tooltip{display:block}
-.city-tooltip{
-    display:none;pointer-events:none;
-}
-
 @media(max-width:768px){
     .stats-row{grid-template-columns:repeat(2,1fr)}
-    .legend{position:static;margin:10px auto;max-width:280px}
+    #map{height:350px}
 }
 </style>
 </head>
@@ -643,152 +592,169 @@ footer .sep{margin:0 8px;color:#2c3e50}
     fout << "</header>\n\n";
 
     // ══════════════════════════════════
-    //  SECTIUNEA 3: HARTA SVG
+    //  SECTIUNEA 3: HARTA LEAFLET
     // ══════════════════════════════════
     fout << "<div class=\"map-card\">\n";
-    fout << "<svg viewBox=\"0 0 1200 500\" xmlns=\"http://www.w3.org/2000/svg\">\n";
+    fout << "<div id=\"map\"></div>\n";
+    fout << "</div>\n\n";
 
-    // Defs
-    fout << R"svg(<defs>
-<linearGradient id="ocean" x1="0%" y1="0%" x2="100%" y2="100%">
-<stop offset="0%" style="stop-color:#0c2d48"/>
-<stop offset="100%" style="stop-color:#14445e"/>
-</linearGradient>
-<filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/>
-<feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-</defs>
-)svg";
+    // Leaflet JavaScript — map init, markers, roads, routes
+    fout << "<script>\n";
 
-    // Fundal ocean
-    fout << "<rect width=\"1200\" height=\"500\" fill=\"url(#ocean)\" rx=\"8\"/>\n";
+    // Map setup with dark tiles
+    fout << "var map = L.map('map',{center:[21.5,-79.5],zoom:7,zoomControl:true,scrollWheelZoom:true});\n";
+    fout << "L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{"
+         << "attribution:'\\u00a9 OpenStreetMap contributors \\u00a9 CARTO',maxZoom:19}).addTo(map);\n\n";
 
-    // Conturul insulei Cuba
-    fout << "<polygon points=\"" << polyPoints
-         << "\" fill=\"#2d6a4f\" fill-opacity=\"0.55\" "
-         << "stroke=\"#52b788\" stroke-width=\"2\" stroke-linejoin=\"round\"/>\n";
+    // City coordinates array
+    fout << "var cities=[\n";
+    for (int i = 0; i < NR_ORASE; i++) {
+        fout << "  {name:'" << numeOrase[i] << "',lat:" << fmt(latitudine[i], 4)
+             << ",lng:" << fmt(longitudine[i], 4)
+             << ",conn:" << getNrConexiuni(i) << "}";
+        if (i < NR_ORASE - 1) fout << ",";
+        fout << "\n";
+    }
+    fout << "];\n";
+    fout << "var src=" << sursa << ",dst=" << destinatia << ";\n\n";
 
-    // Toate drumurile din graf ca linii subtiri de fundal
+    // Tooltip offset directions to avoid overlap
+    fout << "var tDir=[[-1,-1],[1,-1],[1,1],[1,0],[-1,0],[-1,1],[1,-1],[1,-1],[1,-1],[1,-1],[-1,1],[-1,0],[1,0],[-1,-1],[1,1]];\n\n";
+
+    // Background roads (all 20)
+    fout << "// Background roads\n";
     for (int i = 0; i < NR_ORASE; i++)
         for (int j = i + 1; j < NR_ORASE; j++)
             if (distanta[i][j] > 0) {
-                fout << "<line x1=\"" << fmt(toX(longitudine[i]), 1)
-                     << "\" y1=\"" << fmt(toY(latitudine[i]), 1)
-                     << "\" x2=\"" << fmt(toX(longitudine[j]), 1)
-                     << "\" y2=\"" << fmt(toY(latitudine[j]), 1)
-                     << "\" stroke=\"#475569\" stroke-width=\"1.5\" stroke-opacity=\"0.4\"/>\n";
+                fout << "L.polyline([[" << fmt(latitudine[i], 4) << "," << fmt(longitudine[i], 4)
+                     << "],[" << fmt(latitudine[j], 4) << "," << fmt(longitudine[j], 4)
+                     << "]],{color:'rgba(255,255,255,0.15)',weight:2,dashArray:'5,10'}).addTo(map);\n";
             }
+    fout << "\n";
 
-    // Traseele evidentiiate
+    // Route drawing
     if (modMultiplu) {
-        // Mod trasee multiple — primele 5 pe harta
+        // Multiple routes mode — up to 5 on map with layer control
         int nrPeHarta = (nrTrasee < 5) ? nrTrasee : 5;
-        for (int r = nrPeHarta - 1; r >= 0; r--) {
+        fout << "var overlays={};\n";
+        for (int r = 0; r < nrPeHarta; r++) {
             string culoare = culoriMultiple[r % 5];
-            string opac = (r == 0) ? "1.0" : "0.55";
-            string lw = (r == 0) ? "4.5" : "3";
-            string filtru = (r == 0) ? " filter=\"url(#glow)\"" : "";
+            string opac = (r == 0) ? "1.0" : "0.4";
+            int weight = (r == 0) ? 5 : 3;
+            string dash = (r == 0) ? "" : (r == 1 ? "10,8" : r == 2 ? "15,5,5,5" : r == 3 ? "5,5" : "20,10");
+            fout << "var rg" << r << "=L.layerGroup();\n";
             int nrSeg = lungimeTraseu[r] - 1;
             for (int i = 0; i < nrSeg; i++) {
                 int c1 = trasee[r][i];
                 int c2 = trasee[r][i + 1];
-                double px1 = toX(longitudine[c1]);
-                double py1 = toY(latitudine[c1]);
-                double px2 = toX(longitudine[c2]);
-                double py2 = toY(latitudine[c2]);
-                double segLen = sqrt((px2-px1)*(px2-px1)+(py2-py1)*(py2-py1));
-                fout << "<line x1=\"" << fmt(px1,1) << "\" y1=\"" << fmt(py1,1)
-                     << "\" x2=\"" << fmt(px2,1) << "\" y2=\"" << fmt(py2,1)
-                     << "\" stroke=\"" << culoare << "\" stroke-width=\"" << lw
-                     << "\" stroke-opacity=\"" << opac
-                     << "\" stroke-linecap=\"round\"" << filtru
-                     << " class=\"route-line\" style=\"--len:" << fmt(segLen,0) << "\"/>\n";
+                fout << "L.polyline([[" << fmt(latitudine[c1], 4) << "," << fmt(longitudine[c1], 4)
+                     << "],[" << fmt(latitudine[c2], 4) << "," << fmt(longitudine[c2], 4)
+                     << "]],{color:'" << culoare << "',weight:" << weight
+                     << ",opacity:" << opac;
+                if (!dash.empty()) fout << ",dashArray:'" << dash << "'";
+                fout << "}).bindPopup('<b>" << numeOrase[c1] << " \\u2192 " << numeOrase[c2]
+                     << "</b><br>" << distanta[c1][c2] << " km | " << getNumeTipDrum(tipDrum[c1][c2])
+                     << " | " << vitezaMax[c1][c2] << " km/h').addTo(rg" << r << ");\n";
             }
+            fout << "rg" << r << ".addTo(map);\n";
+            fout << "overlays['Traseu " << (r + 1) << " (" << fmt(distanteTrasee[r], 0) << " km)']=rg" << r << ";\n";
         }
+        fout << "L.control.layers(null,overlays,{collapsed:false,position:'bottomright'}).addTo(map);\n\n";
     } else if (traseuEvidentiiat >= 0 && traseuEvidentiiat < nrTrasee) {
-        // Mod traseu unic — colorat pe tipuri de drum
+        // Single route mode — colored by road type with segment popups
         int idx = traseuEvidentiiat;
         int nrSeg = lungimeTraseu[idx] - 1;
         for (int i = 0; i < nrSeg; i++) {
             int c1 = trasee[idx][i];
             int c2 = trasee[idx][i + 1];
             string tip = tipDrum[c1][c2];
-            double px1 = toX(longitudine[c1]);
-            double py1 = toY(latitudine[c1]);
-            double px2 = toX(longitudine[c2]);
-            double py2 = toY(latitudine[c2]);
-            double segLen = sqrt((px2-px1)*(px2-px1)+(py2-py1)*(py2-py1));
-            fout << "<line x1=\"" << fmt(px1,1) << "\" y1=\"" << fmt(py1,1)
-                 << "\" x2=\"" << fmt(px2,1) << "\" y2=\"" << fmt(py2,1)
-                 << "\" stroke=\"" << culoareDrum(tip)
-                 << "\" stroke-width=\"" << grosimeDrum(tip)
-                 << "\" stroke-linecap=\"round\" filter=\"url(#glow)\""
-                 << " class=\"route-line\" style=\"--len:" << fmt(segLen,0)
-                 << ";animation-delay:" << fmt(i * 0.25, 2) << "s\"/>\n";
-        }
-    }
-
-    // Cercuri si etichete pentru orase (cu tooltip SVG <title>)
-    for (int i = 0; i < NR_ORASE; i++) {
-        double cx = toX(longitudine[i]);
-        double cy = toY(latitudine[i]);
-        bool esteSursa = (i == sursa);
-        bool esteDest  = (i == destinatia);
-        int nrCon = getNrConexiuni(i);
-
-        // Grup cu tooltip
-        fout << "<g class=\"city-group\">\n";
-        fout << "<title>" << numeOrase[i]
-             << " (" << fmt(latitudine[i],4) << ", " << fmt(longitudine[i],4)
-             << ") - " << nrCon << " conexiuni</title>\n";
-
-        if (esteSursa || esteDest) {
-            string col = esteSursa ? "#22c55e" : "#ef4444";
-            fout << "<circle cx=\"" << fmt(cx,1) << "\" cy=\"" << fmt(cy,1)
-                 << "\" fill=\"" << col << "\" opacity=\"0.25\">"
-                 << "<animate attributeName=\"r\" values=\"9;18;9\" dur=\"2.5s\" repeatCount=\"indefinite\"/>"
-                 << "<animate attributeName=\"opacity\" values=\"0.4;0.05;0.4\" dur=\"2.5s\" repeatCount=\"indefinite\"/>"
-                 << "</circle>\n";
-            fout << "<circle cx=\"" << fmt(cx,1) << "\" cy=\"" << fmt(cy,1)
-                 << "\" r=\"9\" fill=\"" << col << "\" stroke=\"#fff\" stroke-width=\"2\"/>\n";
-        } else {
-            fout << "<circle cx=\"" << fmt(cx,1) << "\" cy=\"" << fmt(cy,1)
-                 << "\" r=\"6\" fill=\"#94a3b8\" stroke=\"#1e293b\" stroke-width=\"1.5\"/>\n";
+            string col = culoareDrum(tip);
+            int w = (tip == "A") ? 5 : (tip == "CL") ? 3 : 4;
+            fout << "L.polyline([[" << fmt(latitudine[c1], 4) << "," << fmt(longitudine[c1], 4)
+                 << "],[" << fmt(latitudine[c2], 4) << "," << fmt(longitudine[c2], 4)
+                 << "]],{color:'" << col << "',weight:" << w
+                 << ",opacity:1}).bindPopup('<b>" << numeOrase[c1] << " \\u2192 " << numeOrase[c2]
+                 << "</b><br>" << distanta[c1][c2] << " km | " << getNumeTipDrum(tip)
+                 << " | " << vitezaMax[c1][c2] << " km/h').addTo(map);\n";
         }
 
-        // Eticheta
-        fout << "<text x=\"" << fmt(cx + labelDx[i], 1) << "\" y=\"" << fmt(cy + labelDy[i], 1)
-             << "\" text-anchor=\"" << labelAnchor[i]
-             << "\" fill=\"#e2e8f0\" font-size=\"11\" font-weight=\"bold\" font-family=\"'Segoe UI',sans-serif\">"
-             << numeOrase[i] << "</text>\n";
-        fout << "</g>\n";
+        // Direction arrows along the route
+        fout << "var routeCoords=[";
+        for (int i = 0; i < lungimeTraseu[idx]; i++) {
+            int c = trasee[idx][i];
+            fout << "[" << fmt(latitudine[c], 4) << "," << fmt(longitudine[c], 4) << "]";
+            if (i < lungimeTraseu[idx] - 1) fout << ",";
+        }
+        fout << "];\n";
+        fout << "for(var i=0;i<routeCoords.length-1;i++){"
+             << "var a=routeCoords[i],b=routeCoords[i+1];"
+             << "var mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];"
+             << "var ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;"
+             << "var arrow=L.divIcon({className:'',html:'<div style=\"color:#fff;font-size:16px;transform:rotate('+(90-ang)+'deg);text-shadow:0 0 6px rgba(0,0,0,0.8)\">&#9650;</div>',iconSize:[16,16],iconAnchor:[8,8]});"
+             << "L.marker(mid,{icon:arrow,interactive:false}).addTo(map);}\n\n";
     }
 
-    fout << "</svg>\n";
+    // City markers
+    fout << "var allCoords=[];\n";
+    fout << "cities.forEach(function(c,i){\n";
+    fout << "  allCoords.push([c.lat,c.lng]);\n";
+    fout << "  var isSrc=(i===src),isDst=(i===dst);\n";
+    fout << "  if(isSrc||isDst){\n";
+    fout << "    var col=isSrc?'#2ecc71':'#e74c3c';\n";
+    // Pulsating outer ring
+    fout << "    var pulseIcon=L.divIcon({className:'',html:'<div class=\"pulse-marker\" style=\"width:24px;height:24px;background:'+col+';opacity:0.4;border-radius:50%\"></div>',iconSize:[24,24],iconAnchor:[12,12]});\n";
+    fout << "    L.marker([c.lat,c.lng],{icon:pulseIcon,interactive:false}).addTo(map);\n";
+    // Solid inner circle
+    fout << "    L.circleMarker([c.lat,c.lng],{radius:10,color:'#fff',weight:2,fillColor:col,fillOpacity:1})"
+         << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
+         << ".bindTooltip(c.name,{permanent:true,direction:'top',offset:[0,-14]}).addTo(map);\n";
+    fout << "  } else {\n";
+    fout << "    var dx=tDir[i][0]*30,dy=tDir[i][1]*12;\n";
+    fout << "    var dir=dx>0?'right':'left';\n";
+    fout << "    L.circleMarker([c.lat,c.lng],{radius:6,color:'#1e293b',weight:1.5,fillColor:'#3498db',fillOpacity:0.8})"
+         << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
+         << ".bindTooltip(c.name,{permanent:true,direction:dir,offset:[dx/3,dy/3]}).addTo(map);\n";
+    fout << "  }\n";
+    fout << "});\n\n";
 
-    // Legenda
-    fout << "<div class=\"legend\">\n";
+    // Fit bounds
+    fout << "map.fitBounds(L.latLngBounds(allCoords).pad(0.1));\n\n";
+
+    // Legend as Leaflet control
+    fout << "var legend=L.control({position:'topright'});\n";
+    fout << "legend.onAdd=function(){\n";
+    fout << "  var d=L.DomUtil.create('div');\n";
+    fout << "  d.innerHTML='";
+
+    // Legend inner HTML
+    fout << "<div style=\"background:rgba(22,33,62,0.92);padding:15px;border-radius:10px;color:#e0e0e0;font-size:13px;border:1px solid #2a3a5c;box-shadow:0 4px 20px rgba(0,0,0,0.35);backdrop-filter:blur(8px)\">";
     if (modMultiplu) {
-        fout << "<h4>Trasee</h4>\n";
+        fout << "<div style=\"font-weight:bold;color:#0ea5e9;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px\">TRASEE</div>";
         int nrLegenda = (nrTrasee < 5) ? nrTrasee : 5;
         for (int i = 0; i < nrLegenda; i++) {
-            fout << "<div class=\"legend-item\">"
-                 << "<div class=\"legend-line\" style=\"background:" << culoriMultiple[i % 5]
-                 << (i == 0 ? "" : ";opacity:0.6") << "\"></div>"
-                 << "Traseu " << (i + 1)
-                 << " (" << fmt(distanteTrasee[i], 0) << " km)</div>\n";
+            fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\">"
+                 << "<div style=\"width:30px;height:4px;border-radius:2px;margin-right:10px;background:" << culoriMultiple[i % 5]
+                 << (i > 0 ? ";opacity:0.6" : "") << "\"></div>"
+                 << "Traseu " << (i + 1) << " (" << fmt(distanteTrasee[i], 0) << " km)</div>";
         }
     } else {
-        fout << "<h4>Tipuri de drum</h4>\n";
-        fout << "<div class=\"legend-item\"><div class=\"legend-line\" style=\"background:#e74c3c;height:4px\"></div>A &mdash; Autopista (100 km/h)</div>\n";
-        fout << "<div class=\"legend-item\"><div class=\"legend-line\" style=\"background:#3498db;height:3px\"></div>CN &mdash; Carretera Nacional (80 km/h)</div>\n";
-        fout << "<div class=\"legend-item\"><div class=\"legend-line\" style=\"background:#f39c12;height:3px\"></div>CR &mdash; Carretera Regional (60 km/h)</div>\n";
-        fout << "<div class=\"legend-item\"><div class=\"legend-line\" style=\"background:#95a5a6;height:2px\"></div>CL &mdash; Carretera Local (40 km/h)</div>\n";
+        fout << "<div style=\"font-weight:bold;color:#0ea5e9;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px\">TIPURI DE DRUM</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:4px;border-radius:2px;margin-right:10px;background:#e74c3c\"></div>A \\u2014 Autopista (100 km/h)</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:3px;border-radius:2px;margin-right:10px;background:#3498db\"></div>CN \\u2014 Carretera Nacional (80 km/h)</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:3px;border-radius:2px;margin-right:10px;background:#f39c12\"></div>CR \\u2014 Carretera Regional (60 km/h)</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:2px;border-radius:2px;margin-right:10px;background:#95a5a6\"></div>CL \\u2014 Carretera Local (40 km/h)</div>";
     }
-    fout << "<div style=\"border-top:1px solid #2c3e50;margin:8px 0 6px\"></div>\n";
-    fout << "<div class=\"legend-item\"><div class=\"legend-dot\" style=\"background:#22c55e;border:2px solid #fff\"></div>Plecare</div>\n";
-    fout << "<div class=\"legend-item\"><div class=\"legend-dot\" style=\"background:#ef4444;border:2px solid #fff\"></div>Destinatie</div>\n";
-    fout << "</div>\n";
-    fout << "</div>\n\n";
+    fout << "<div style=\"border-top:1px solid #2c3e50;margin:8px 0 6px\"></div>";
+    fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:12px;height:12px;border-radius:50%;margin-right:10px;background:#2ecc71;border:2px solid #fff\"></div>Plecare</div>";
+    fout << "<div style=\"display:flex;align-items:center\"><div style=\"width:12px;height:12px;border-radius:50%;margin-right:10px;background:#e74c3c;border:2px solid #fff\"></div>Destinatie</div>";
+    fout << "</div>';\n";
+
+    fout << "  L.DomEvent.disableClickPropagation(d);\n";
+    fout << "  L.DomEvent.disableScrollPropagation(d);\n";
+    fout << "  return d;\n";
+    fout << "};\n";
+    fout << "legend.addTo(map);\n";
+    fout << "</script>\n\n";
 
     // ══════════════════════════════════
     //  SECTIUNEA 4: STATS PANEL
@@ -822,12 +788,11 @@ footer .sep{margin:0 8px;color:#2c3e50}
          << " &#8594; " << numeOrase[destinatia] << "</h2>\n";
 
     if (modMultiplu) {
-        // Lista toate traseele
         fout << "<p style=\"color:#94a3b8;margin-bottom:16px\">S-au gasit <strong style=\"color:#0ea5e9\">"
              << nrTrasee << "</strong> trasee posibile (sortate dupa distanta)</p>\n";
         if (nrTrasee > 5) {
             fout << "<p style=\"color:#64748b;margin-bottom:12px;font-size:0.9em\">"
-                 << "Pe harta sunt afisate primele 5 trasee.</p>\n";
+                 << "Pe harta sunt afisate primele 5 trasee. Folositi controlul de straturi din dreapta-jos pentru a le activa/dezactiva.</p>\n";
         }
         fout << "<div class=\"route-list\">\n";
         int nrAfis = (nrTrasee < 30) ? nrTrasee : 30;
@@ -851,10 +816,8 @@ footer .sep{margin:0 8px;color:#2c3e50}
         }
         fout << "</div>\n";
     } else if (nrTrasee > 0) {
-        // Detalii traseu unic
         int idx = (traseuEvidentiiat >= 0) ? traseuEvidentiiat : 0;
 
-        // Rezumat traseu
         fout << "<div class=\"route-summary\">";
         for (int i = 0; i < lungimeTraseu[idx]; i++) {
             fout << "<strong>" << numeOrase[trasee[idx][i]] << "</strong>";
@@ -864,7 +827,6 @@ footer .sep{margin:0 8px;color:#2c3e50}
              << " &nbsp;&bull;&nbsp; <span class=\"timp\">" << formateazaTimp(timpTrasee[idx]) << "</span>"
              << "</div>\n";
 
-        // Tabel detalii segmente
         fout << "<table>\n<thead><tr>"
              << "<th>#</th><th>De la</th><th>La</th>"
              << "<th>Distanta</th><th>Tip drum</th><th>Viteza</th><th>Timp</th>"
@@ -907,9 +869,9 @@ footer .sep{margin:0 8px;color:#2c3e50}
     //  SECTIUNEA 6: FOOTER
     // ══════════════════════════════════
     fout << R"html(<footer>
-<span>Cuba Navigator</span> v2.0 &mdash; Proiect Backtracking C++
+<span>Cuba Navigator</span> v2.1 &mdash; Proiect Backtracking C++
 <span class="sep">|</span> Algoritm: Backtracking Iterativ
-<span class="sep">|</span> Graf: 15 noduri, 20 muchii
+<span class="sep">|</span> Harta: Leaflet.js + OpenStreetMap
 </footer>
 </div>
 </body>
