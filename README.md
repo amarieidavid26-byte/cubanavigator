@@ -1,13 +1,13 @@
 # Cuba Navigator
 
-Aplicatie de navigare GPS pentru insula Cuba, implementata in C++ folosind algoritmul **backtracking** pe scheletul problemei comis-voiajor.
+Aplicatie de navigare GPS pentru insula Cuba, implementata in C++ folosind algoritmul **backtracking iterativ** cu structura INIT/EXISTA/VALID/SOLUTIE/TIPAR.
 
 Programul gaseste toate traseele posibile intre doua orase din Cuba, determina traseul optim (distanta minima) si genereaza o harta HTML interactiva cu vizualizarea rezultatelor.
 
 ## Compilare
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -o cuba_navigator main.cpp graf.cpp
+g++ -std=c++17 -Wall -Wextra -o cuba_navigator main.cpp
 ```
 
 ## Rulare
@@ -29,18 +29,17 @@ Dupa fiecare operatie se genereaza automat `rezultat.html` — o harta interacti
 
 | Fisier | Descriere |
 |--------|-----------|
-| `tipuri.h` | Structuri de date: `Drum`, `Oras`, `Traseu` |
-| `graf.h` | Declaratia clasei `Graf` |
-| `graf.cpp` | Implementare: backtracking, cautare, calcul timp, generare HTML |
-| `main.cpp` | Meniu interactiv cu culori ANSI, cronometrare, auto-open browser |
+| `main.cpp` | Tot codul: variabile globale, BKT iterativ, meniu, generare HTML |
 | `rezultat.html` | Fisier generat — harta SVG cu trasee, legenda, statistici |
+| `archive_v1_oop/` | Backup-ul versiunii v1.0 cu clase si STL |
 
 ## Algoritm
 
-- **Metoda**: DFS (Depth-First Search) cu Backtracking
+- **Metoda**: Backtracking iterativ (structura BKT din clasa)
+- **Functii**: INIT, EXISTA, VALID, SOLUTIE, TIPAR, BKT
+- **Date**: variabile globale, matrice de adiacenta, vectori clasici (fara STL)
 - **Complexitate**: O(N!) in cazul cel mai defavorabil (toate permutarile de noduri)
 - **Graful**: 15 noduri (orase), 20 muchii (drumuri bidirectionale)
-- **Functionare**: la fiecare pas, algoritmul incearca toti vecinii nevizitati; cand ajunge la destinatie, salveaza traseul; apoi revine (backtrack) pentru a explora alte cai
 
 ## Date geografice
 
