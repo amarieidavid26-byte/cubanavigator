@@ -504,11 +504,12 @@ header p{font-size:1.05em;color:#64748b;letter-spacing:2px;text-transform:upperc
 .leaflet-popup-content-wrapper{background:#16213e;color:#e0e0e0;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5)}
 .leaflet-popup-content{margin:10px 14px;font-size:13px;line-height:1.5}
 .leaflet-popup-tip{background:#16213e}
-.leaflet-control-layers{background:#16213e !important;color:#e0e0e0;border:1px solid #2a3a5c !important;border-radius:10px !important;box-shadow:0 4px 20px rgba(0,0,0,0.4) !important;padding:8px 12px !important}
-.leaflet-control-layers label{color:#cbd5e1;font-size:13px}
+.leaflet-control-layers{background:rgba(22,33,62,0.92) !important;color:#e0e0e0 !important;border:1px solid #2a3a5c !important;border-radius:10px !important;box-shadow:0 4px 20px rgba(0,0,0,0.4) !important;padding:8px 12px !important;font-family:'Segoe UI',sans-serif !important}
+.leaflet-control-layers-base label,.leaflet-control-layers-overlays label{color:#e0e0e0 !important;margin-bottom:4px !important;font-size:13px}
 .leaflet-control-layers-separator{border-top-color:#2a3a5c !important}
 .leaflet-control-zoom a{background:#16213e !important;color:#0ea5e9 !important;border-color:#2a3a5c !important}
 .leaflet-control-zoom a:hover{background:#1e3a5f !important}
+.leaflet-control-scale-line{background:rgba(22,33,62,0.85) !important;border-color:#0ea5e9 !important;color:#e0e0e0 !important;font-size:11px !important;padding:2px 8px !important}
 
 /* Pulsating markers */
 .pulse-marker{border-radius:50%;animation:pulse 2.5s ease-in-out infinite}
@@ -601,10 +602,16 @@ footer .sep{margin:0 8px;color:#2c3e50}
     // Leaflet JavaScript — map init, markers, roads, routes
     fout << "<script>\n";
 
-    // Map setup with dark tiles
-    fout << "var map = L.map('map',{center:[21.5,-79.5],zoom:7,zoomControl:true,scrollWheelZoom:true});\n";
-    fout << "L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{"
-         << "attribution:'\\u00a9 OpenStreetMap contributors \\u00a9 CARTO',maxZoom:19}).addTo(map);\n\n";
+    // Map setup with dual tile layers (dark + satellite)
+    fout << "var map=L.map('map',{center:[21.5,-79.5],zoom:7,zoomControl:true,scrollWheelZoom:true});\n";
+    fout << "var darkLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{"
+         << "attribution:'\\u00a9 OpenStreetMap contributors \\u00a9 CARTO',maxZoom:19});\n";
+    fout << "var satelliteLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{"
+         << "attribution:'\\u00a9 Esri, Maxar, Earthstar Geographics',maxZoom:19});\n";
+    fout << "darkLayer.addTo(map);\n";
+    fout << "L.control.layers({'\\ud83c\\udf19 Dark':darkLayer,'\\ud83d\\udef0\\ufe0f Satelit':satelliteLayer},null,"
+         << "{position:'topleft',collapsed:false}).addTo(map);\n";
+    fout << "L.control.scale({metric:true,imperial:false,position:'bottomleft',maxWidth:150}).addTo(map);\n\n";
 
     // City coordinates array
     fout << "var cities=[\n";
@@ -659,7 +666,7 @@ footer .sep{margin:0 8px;color:#2c3e50}
             fout << "rg" << r << ".addTo(map);\n";
             fout << "overlays['Traseu " << (r + 1) << " (" << fmt(distanteTrasee[r], 0) << " km)']=rg" << r << ";\n";
         }
-        fout << "L.control.layers(null,overlays,{collapsed:false,position:'bottomright'}).addTo(map);\n\n";
+        fout << "L.control.layers(null,overlays,{collapsed:false,position:'bottomright',sortLayers:false}).addTo(map);\n\n";
     } else if (traseuEvidentiiat >= 0 && traseuEvidentiiat < nrTrasee) {
         // Single route mode — colored by road type with segment popups
         int idx = traseuEvidentiiat;
@@ -753,7 +760,28 @@ footer .sep{margin:0 8px;color:#2c3e50}
     fout << "  L.DomEvent.disableScrollPropagation(d);\n";
     fout << "  return d;\n";
     fout << "};\n";
-    fout << "legend.addTo(map);\n";
+    fout << "legend.addTo(map);\n\n";
+
+    // Compass rose as Leaflet control (topright, below legend)
+    fout << "var compass=L.control({position:'topright'});\n";
+    fout << "compass.onAdd=function(){\n";
+    fout << "  var d=L.DomUtil.create('div');\n";
+    fout << "  d.innerHTML='<div style=\"background:rgba(22,33,62,0.9);border-radius:50%;width:60px;height:60px;"
+         << "display:flex;align-items:center;justify-content:center;border:2px solid #2a3a5c;margin-top:10px\">"
+         << "<div style=\"position:relative;width:40px;height:40px\">"
+         << "<div style=\"position:absolute;top:0;left:50%;transform:translateX(-50%);color:#e74c3c;font-weight:bold;font-size:14px\">N</div>"
+         << "<div style=\"position:absolute;bottom:0;left:50%;transform:translateX(-50%);color:#8892a0;font-size:10px\">S</div>"
+         << "<div style=\"position:absolute;left:0;top:50%;transform:translateY(-50%);color:#8892a0;font-size:10px\">V</div>"
+         << "<div style=\"position:absolute;right:0;top:50%;transform:translateY(-50%);color:#8892a0;font-size:10px\">E</div>"
+         << "<div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)\">"
+         << "<div style=\"width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;"
+         << "border-bottom:15px solid #e74c3c;position:absolute;top:-15px;left:-5px\"></div>"
+         << "<div style=\"width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;"
+         << "border-top:15px solid #8892a0;position:absolute;top:0;left:-5px\"></div>"
+         << "</div></div></div>';\n";
+    fout << "  return d;\n";
+    fout << "};\n";
+    fout << "compass.addTo(map);\n";
     fout << "</script>\n\n";
 
     // ══════════════════════════════════
@@ -869,7 +897,7 @@ footer .sep{margin:0 8px;color:#2c3e50}
     //  SECTIUNEA 6: FOOTER
     // ══════════════════════════════════
     fout << R"html(<footer>
-<span>Cuba Navigator</span> v2.1 &mdash; Proiect Backtracking C++
+<span>Cuba Navigator</span> v2.2 &mdash; Proiect Backtracking C++
 <span class="sep">|</span> Algoritm: Backtracking Iterativ
 <span class="sep">|</span> Harta: Leaflet.js + OpenStreetMap
 </footer>
