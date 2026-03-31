@@ -10,6 +10,7 @@
 #include <limits>
 #include <chrono>
 #include <cstdlib>
+#include <thread>
 
 using namespace std;
 
@@ -107,7 +108,7 @@ void initializeazaDate() {
     adaugaDrum(10, 12, 86,  "CR", 60);    // Santiago de Cuba - Guantanamo
     adaugaDrum(9,  10, 135, "CN", 80);    // Holguin - Santiago de Cuba
     adaugaDrum(11, 9,  72,  "CR", 60);    // Bayamo - Holguin
-    adaugaDrum(2,  4,  157, "CR", 60);    // Matanzas - Cienfuegos
+    adaugaDrum(2,  4,  195, "CR", 60);    // Matanzas - Cienfuegos
     adaugaDrum(3,  7,  188, "A",  100);   // Santa Clara - Ciego de Avila
     adaugaDrum(8,  9,  206, "CN", 80);    // Camaguey - Holguin
 }
@@ -288,10 +289,10 @@ string formateazaTimp(double ore) {
 
 // Returneaza culoarea HTML pentru un tip de drum
 string culoareDrum(string tip) {
-    if (tip == "A")  return "#e74c3c";
-    if (tip == "CN") return "#3498db";
-    if (tip == "CR") return "#f39c12";
-    if (tip == "CL") return "#95a5a6";
+    if (tip == "A")  return "#c45a4a";
+    if (tip == "CN") return "#4a8ab5";
+    if (tip == "CR") return "#d4944a";
+    if (tip == "CL") return "#7a8a7a";
     return "#ffffff";
 }
 
@@ -338,9 +339,9 @@ void separator() {
 
 void afiseazaOrase() {
     cout << "\n";
-    cout << GRAY << "  +-----+------------------------+-------------------+" << RESET << endl;
-    cout << GRAY << "  | Nr. | Oras                   | Coordonate GPS    |" << RESET << endl;
-    cout << GRAY << "  +-----+------------------------+-------------------+" << RESET << endl;
+    cout << GRAY << "  +-----+------------------------+-------------------+------+" << RESET << endl;
+    cout << GRAY << "  | Nr. | Oras                   | Coordonate GPS    | Conn |" << RESET << endl;
+    cout << GRAY << "  +-----+------------------------+-------------------+------+" << RESET << endl;
     for (int i = 0; i < NR_ORASE; i++) {
         cout << GRAY << "  | " << RESET << setw(3) << (i + 1)
              << GRAY << " | " << RESET
@@ -349,9 +350,21 @@ void afiseazaOrase() {
              << right << fixed << setprecision(4)
              << setw(7) << latitudine[i] << ", "
              << setw(8) << longitudine[i]
+             << GRAY << " | " << RESET << CYAN << setw(4) << getNrConexiuni(i) << RESET
              << GRAY << " |" << RESET << endl;
     }
-    cout << GRAY << "  +-----+------------------------+-------------------+" << RESET << endl;
+    cout << GRAY << "  +-----+------------------------+-------------------+------+" << RESET << endl;
+}
+
+void afiseazaSpinner(string mesaj) {
+    const string frames[] = {"\xe2\xa0\x8b","\xe2\xa0\x99","\xe2\xa0\xb9","\xe2\xa0\xb8",
+                             "\xe2\xa0\xbc","\xe2\xa0\xb4","\xe2\xa0\xa6","\xe2\xa0\xa7",
+                             "\xe2\xa0\x87","\xe2\xa0\x8f"};
+    for (int i = 0; i < 8; i++) {
+        cout << "\r  " << YELLOW << frames[i % 10] << " " << mesaj << RESET << flush;
+        this_thread::sleep_for(chrono::milliseconds(60));
+    }
+    cout << "\r  " << GREEN << "\xe2\x9c\x93 " << mesaj << " Gata!          " << RESET << endl;
 }
 
 int citesteOras(string mesaj) {
@@ -441,6 +454,7 @@ void deschideHTML() {
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║   GENERARE HTML — Harta Leaflet.js + OpenStreetMap a traseelor    ║
 // ║   traseuEvidentiiat: -1 = trasee multiple, >=0 = traseu unic      ║
+// ║   v3.0 — Retro-futuristic cartography + Cuban vintage design      ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 void genereazaHTML(string titlu, int traseuEvidentiiat) {
     ofstream fout("rezultat.html");
@@ -452,7 +466,44 @@ void genereazaHTML(string titlu, int traseuEvidentiiat) {
     bool modMultiplu = (traseuEvidentiiat == -1);
 
     // Culori pentru trasee multiple
-    string culoriMultiple[5] = {"#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6"};
+    string culoriMultiple[5] = {"#c45a4a","#4a8ab5","#4a9e6a","#d4944a","#9a6abf"};
+
+    // Determine if gradient polylines should be used (options 1 and 4: Distanta or Timp)
+    bool useGradient = false;
+    if (!modMultiplu) {
+        if (titlu.find("Distanta") != string::npos || titlu.find("Timp") != string::npos) {
+            useGradient = true;
+        }
+    }
+
+    // Compute road type percentages for donut chart (single mode)
+    double kmA = 0, kmCN = 0, kmCR = 0, kmCL = 0;
+    if (!modMultiplu && nrTrasee > 0) {
+        int idx = (traseuEvidentiiat >= 0) ? traseuEvidentiiat : 0;
+        int nrSeg = lungimeTraseu[idx] - 1;
+        for (int i = 0; i < nrSeg; i++) {
+            int c1 = trasee[idx][i];
+            int c2 = trasee[idx][i + 1];
+            string tip = tipDrum[c1][c2];
+            double d = distanta[c1][c2];
+            if (tip == "A") kmA += d;
+            else if (tip == "CN") kmCN += d;
+            else if (tip == "CR") kmCR += d;
+            else if (tip == "CL") kmCL += d;
+        }
+    }
+    double kmTotal = kmA + kmCN + kmCR + kmCL;
+    double pctA = (kmTotal > 0) ? (kmA / kmTotal * 100) : 0;
+    double pctCN = (kmTotal > 0) ? (kmCN / kmTotal * 100) : 0;
+    double pctCR = (kmTotal > 0) ? (kmCR / kmTotal * 100) : 0;
+    double pctCL = (kmTotal > 0) ? (kmCL / kmTotal * 100) : 0;
+
+    // Get generation timestamp
+    auto now = chrono::system_clock::now();
+    time_t nowT = chrono::system_clock::to_time_t(now);
+    char timestampBuf[64];
+    strftime(timestampBuf, sizeof(timestampBuf), "%Y-%m-%d %H:%M:%S", localtime(&nowT));
+    string timestamp(timestampBuf);
 
     // ══════════════════════════════════
     //  SECTIUNEA 1: HTML HEAD + CSS
@@ -463,131 +514,362 @@ void genereazaHTML(string titlu, int traseuEvidentiiat) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cuba Navigator - Rezultat</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F9ED;</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{
-    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
-    background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#1a1a2e 100%);
-    color:#e0e0e0;min-height:100vh;
+:root{
+    --bg-deep:#0a1a1f;
+    --bg-card:rgba(15,35,42,0.75);
+    --bg-card-solid:#0f232a;
+    --bg-inner:#081318;
+    --accent-primary:#c87533;
+    --accent-secondary:#d4944a;
+    --accent-tertiary:#e8b87a;
+    --text-cream:#f5e6d0;
+    --text-muted:#8a9a8a;
+    --text-dim:#5a6a5a;
+    --border-subtle:rgba(200,117,51,0.15);
+    --border-accent:rgba(200,117,51,0.3);
+    --glass-bg:rgba(15,35,42,0.65);
+    --glass-border:rgba(200,117,51,0.12);
+    --road-a:#c45a4a;
+    --road-cn:#4a8ab5;
+    --road-cr:#d4944a;
+    --road-cl:#7a8a7a;
+    --shadow-heavy:0 8px 40px rgba(0,0,0,0.5),0 0 0 1px var(--border-subtle);
+    --shadow-light:0 4px 20px rgba(0,0,0,0.3);
 }
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+
+body{
+    font-family:'Source Sans 3','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:var(--bg-deep);
+    color:var(--text-cream);
+    min-height:100vh;
+    position:relative;
+    overflow-x:hidden;
+}
+
+/* Noise grain overlay */
+body::after{
+    content:'';
+    position:fixed;
+    top:0;left:0;width:100%;height:100%;
+    pointer-events:none;
+    z-index:9999;
+    opacity:0.035;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* Light theme overrides */
+body.light{
+    --bg-deep:#f5e6d0;
+    --bg-card:rgba(255,248,240,0.8);
+    --bg-card-solid:#fff8f0;
+    --bg-inner:#f0dcc6;
+    --text-cream:#1a1a1f;
+    --text-muted:#5a5040;
+    --text-dim:#8a8070;
+    --border-subtle:rgba(200,117,51,0.2);
+    --border-accent:rgba(200,117,51,0.35);
+    --glass-bg:rgba(255,248,240,0.7);
+    --glass-border:rgba(200,117,51,0.18);
+    --shadow-heavy:0 8px 40px rgba(0,0,0,0.12),0 0 0 1px var(--border-subtle);
+    --shadow-light:0 4px 20px rgba(0,0,0,0.08);
+}
+body.light::after{opacity:0.02}
+body.light .leaflet-tooltip{background:rgba(255,248,240,0.95)!important;color:#1a1a1f!important;border-color:var(--border-accent)!important}
+body.light .leaflet-tooltip-top:before{border-top-color:rgba(255,248,240,0.95)!important}
+body.light .leaflet-tooltip-bottom:before{border-bottom-color:rgba(255,248,240,0.95)!important}
+body.light .leaflet-tooltip-left:before{border-left-color:rgba(255,248,240,0.95)!important}
+body.light .leaflet-tooltip-right:before{border-right-color:rgba(255,248,240,0.95)!important}
+body.light .leaflet-popup-content-wrapper{background:#fff8f0!important;color:#1a1a1f!important}
+body.light .leaflet-popup-tip{background:#fff8f0!important}
+body.light .leaflet-control-zoom a{background:#fff8f0!important;color:var(--accent-primary)!important;border-color:var(--border-accent)!important}
+body.light .leaflet-control-zoom a:hover{background:#f0dcc6!important}
+body.light .leaflet-control-scale-line{background:rgba(255,248,240,0.9)!important;border-color:var(--accent-primary)!important;color:#1a1a1f!important}
+
 .container{max-width:1300px;margin:0 auto;padding:20px}
 
-@keyframes fadeDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.8);opacity:0.3}}
+/* ── Keyframes ── */
+@keyframes revealUp{
+    from{opacity:0;transform:translateY(30px);filter:blur(6px)}
+    to{opacity:1;transform:translateY(0);filter:blur(0)}
+}
+@keyframes drawLine{
+    from{width:0}
+    to{width:100%}
+}
+@keyframes fadeIn{
+    from{opacity:0}
+    to{opacity:1}
+}
+@keyframes pulse{
+    0%,100%{transform:scale(1);opacity:1}
+    50%{transform:scale(1.8);opacity:0.3}
+}
 
-header{text-align:center;padding:30px 0 20px;animation:fadeDown 0.6s ease-out}
+/* ── Header ── */
+header{
+    text-align:center;padding:40px 0 28px;
+    animation:revealUp 0.7s ease-out 0s both;
+}
+header .decorative-line{
+    width:0;height:2px;margin:0 auto 18px;
+    background:linear-gradient(90deg,transparent,var(--accent-primary),var(--accent-secondary),var(--accent-tertiary),transparent);
+    animation:drawLine 1.2s ease-out 0.3s forwards;
+}
+header .compass-ornament{
+    font-size:1.4em;margin-bottom:8px;display:block;
+    color:var(--accent-secondary);letter-spacing:4px;
+    opacity:0;animation:fadeIn 0.8s ease-out 0.2s forwards;
+}
 header h1{
-    font-size:2.4em;
-    background:linear-gradient(135deg,#0ea5e9,#38bdf8,#7dd3fc);
+    font-family:'Playfair Display',Georgia,serif;
+    font-size:2.6em;font-weight:900;
+    background:linear-gradient(135deg,var(--accent-primary),var(--accent-secondary),var(--accent-tertiary),var(--text-cream));
     -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-    background-clip:text;margin-bottom:6px;letter-spacing:1px;
+    background-clip:text;margin-bottom:8px;letter-spacing:2px;
 }
-header p{font-size:1.05em;color:#64748b;letter-spacing:2px;text-transform:uppercase;font-weight:300}
+header p{
+    font-family:'Source Sans 3',sans-serif;
+    font-size:1.05em;color:var(--text-muted);letter-spacing:3px;
+    text-transform:uppercase;font-weight:300;
+}
+.theme-toggle{
+    position:absolute;top:20px;right:20px;
+    background:var(--glass-bg);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid var(--glass-border);
+    color:var(--text-cream);font-size:1.3em;
+    width:44px;height:44px;border-radius:50%;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all 0.3s ease;z-index:100;
+}
+.theme-toggle:hover{
+    background:var(--accent-primary);
+    border-color:var(--accent-secondary);
+    transform:scale(1.1);
+}
 
+/* ── Map Card ── */
 .map-card{
-    background:#16213e;border-radius:14px;
-    box-shadow:0 8px 40px rgba(0,0,0,0.4),0 0 0 1px rgba(14,165,233,0.1);
+    background:var(--glass-bg);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--glass-border);
+    border-radius:16px;
+    box-shadow:var(--shadow-heavy);
     padding:20px;margin-bottom:24px;position:relative;overflow:hidden;
-    animation:fadeDown 0.8s ease-out;
+    animation:revealUp 0.7s ease-out 0.2s both;
 }
-#map{width:100%;height:500px;border-radius:12px;border:2px solid #2a3a5c;z-index:0}
+#map{width:100%;height:500px;border-radius:12px;border:2px solid var(--border-accent);z-index:0}
+#map.fullscreen-map{
+    position:fixed!important;top:0!important;left:0!important;
+    width:100vw!important;height:100vh!important;
+    border-radius:0!important;border:none!important;
+    z-index:10000!important;
+}
+.fullscreen-btn{
+    position:absolute;top:28px;right:28px;z-index:5;
+    background:var(--glass-bg);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    border:1px solid var(--glass-border);
+    color:var(--text-cream);font-size:1.2em;
+    width:38px;height:38px;border-radius:8px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:all 0.3s ease;
+}
+.fullscreen-btn:hover{background:var(--accent-primary);border-color:var(--accent-secondary)}
 
-/* Leaflet tooltip and popup dark theme */
-.leaflet-tooltip{background:rgba(22,33,62,0.92);color:#e2e8f0;border:1px solid #2a3a5c;font-size:11px;font-weight:bold;font-family:'Segoe UI',sans-serif;padding:3px 8px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
-.leaflet-tooltip-top:before{border-top-color:rgba(22,33,62,0.92)}
-.leaflet-tooltip-bottom:before{border-bottom-color:rgba(22,33,62,0.92)}
-.leaflet-tooltip-left:before{border-left-color:rgba(22,33,62,0.92)}
-.leaflet-tooltip-right:before{border-right-color:rgba(22,33,62,0.92)}
-.leaflet-popup-content-wrapper{background:#16213e;color:#e0e0e0;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5)}
+/* Leaflet tooltip and popup themed */
+.leaflet-tooltip{
+    background:rgba(10,26,31,0.92);color:var(--text-cream);
+    border:1px solid var(--border-accent);font-size:11px;font-weight:bold;
+    font-family:'Source Sans 3',sans-serif;padding:3px 8px;border-radius:4px;
+    box-shadow:0 2px 8px rgba(0,0,0,0.4);
+}
+.leaflet-tooltip-top:before{border-top-color:rgba(10,26,31,0.92)}
+.leaflet-tooltip-bottom:before{border-bottom-color:rgba(10,26,31,0.92)}
+.leaflet-tooltip-left:before{border-left-color:rgba(10,26,31,0.92)}
+.leaflet-tooltip-right:before{border-right-color:rgba(10,26,31,0.92)}
+.leaflet-popup-content-wrapper{background:var(--bg-card-solid);color:var(--text-cream);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.5)}
 .leaflet-popup-content{margin:10px 14px;font-size:13px;line-height:1.5}
-.leaflet-popup-tip{background:#16213e}
-.leaflet-control-layers{background:rgba(22,33,62,0.92) !important;color:#e0e0e0 !important;border:1px solid #2a3a5c !important;border-radius:10px !important;box-shadow:0 4px 20px rgba(0,0,0,0.4) !important;padding:8px 12px !important;font-family:'Segoe UI',sans-serif !important}
-.leaflet-control-layers-base label,.leaflet-control-layers-overlays label{color:#e0e0e0 !important;margin-bottom:4px !important;font-size:13px}
-.leaflet-control-layers-separator{border-top-color:#2a3a5c !important}
-.leaflet-control-zoom a{background:#16213e !important;color:#0ea5e9 !important;border-color:#2a3a5c !important}
-.leaflet-control-zoom a:hover{background:#1e3a5f !important}
-.leaflet-control-scale-line{background:rgba(22,33,62,0.85) !important;border-color:#0ea5e9 !important;color:#e0e0e0 !important;font-size:11px !important;padding:2px 8px !important}
+.leaflet-popup-tip{background:var(--bg-card-solid)}
+.leaflet-control-layers{
+    background:rgba(10,26,31,0.92)!important;color:var(--text-cream)!important;
+    border:1px solid var(--border-accent)!important;border-radius:10px!important;
+    box-shadow:0 4px 20px rgba(0,0,0,0.4)!important;padding:8px 12px!important;
+    font-family:'Source Sans 3',sans-serif!important;
+}
+.leaflet-control-layers-base label,.leaflet-control-layers-overlays label{color:var(--text-cream)!important;margin-bottom:4px!important;font-size:13px}
+.leaflet-control-layers-separator{border-top-color:var(--border-accent)!important}
+.leaflet-control-zoom a{background:var(--bg-card-solid)!important;color:var(--accent-primary)!important;border-color:var(--border-accent)!important}
+.leaflet-control-zoom a:hover{background:var(--bg-inner)!important}
+.leaflet-control-scale-line{
+    background:rgba(10,26,31,0.85)!important;border-color:var(--accent-primary)!important;
+    color:var(--text-cream)!important;font-size:11px!important;padding:2px 8px!important;
+}
 
 /* Pulsating markers */
 .pulse-marker{border-radius:50%;animation:pulse 2.5s ease-in-out infinite}
 
-/* Stats panel */
+/* ── Stats Panel ── */
 .stats-row{
     display:grid;grid-template-columns:repeat(4,1fr);gap:16px;
-    margin-bottom:24px;animation:fadeUp 0.9s ease-out;
+    margin-bottom:24px;
 }
 .stat-card{
-    background:#16213e;border-radius:12px;padding:20px 18px;text-align:center;
-    box-shadow:0 4px 20px rgba(0,0,0,0.3),0 0 0 1px rgba(14,165,233,0.08);
+    background:var(--glass-bg);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--glass-border);
+    border-top:3px solid var(--accent-primary);
+    border-radius:12px;padding:20px 18px;text-align:center;
+    box-shadow:var(--shadow-light);
     transition:transform 0.2s;
 }
+.stat-card:nth-child(1){animation:revealUp 0.6s ease-out 0.4s both}
+.stat-card:nth-child(2){animation:revealUp 0.6s ease-out 0.5s both}
+.stat-card:nth-child(3){animation:revealUp 0.6s ease-out 0.6s both}
+.stat-card:nth-child(4){animation:revealUp 0.6s ease-out 0.7s both}
 .stat-card:hover{transform:translateY(-3px)}
 .stat-icon{font-size:1.6em;margin-bottom:6px;display:block}
-.stat-value{font-size:1.5em;font-weight:800;color:#0ea5e9;display:block;margin-bottom:2px}
-.stat-label{font-size:0.78em;color:#64748b;text-transform:uppercase;letter-spacing:1px}
+.stat-value{font-size:1.5em;font-weight:800;color:var(--accent-primary);display:block;margin-bottom:2px;font-family:'Playfair Display',serif}
+.stat-label{font-size:0.78em;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px}
 
+/* ── Info Card ── */
 .info-card{
-    background:#16213e;border-radius:14px;
-    box-shadow:0 8px 40px rgba(0,0,0,0.4),0 0 0 1px rgba(14,165,233,0.1);
+    background:var(--glass-bg);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--glass-border);
+    border-radius:16px;
+    box-shadow:var(--shadow-heavy);
     padding:30px 35px;margin-bottom:24px;
-    animation:fadeUp 1s ease-out 0.3s both;
+    animation:revealUp 0.7s ease-out 0.6s both;
 }
-.info-card h2{color:#0ea5e9;margin-bottom:20px;font-size:1.45em;border-bottom:2px solid #1e3a5f;padding-bottom:14px}
+.info-card h2{
+    font-family:'Playfair Display',Georgia,serif;
+    color:var(--accent-primary);margin-bottom:20px;font-size:1.45em;
+    border-bottom:2px solid var(--border-accent);padding-bottom:14px;
+}
 .route-summary{
-    background:#1a1a2e;border-radius:10px;padding:16px 22px;margin-bottom:18px;
-    border-left:4px solid #0ea5e9;font-size:1.08em;line-height:1.7;
+    background:var(--bg-inner);border-radius:10px;padding:16px 22px;margin-bottom:18px;
+    border-left:4px solid var(--accent-primary);font-size:1.08em;line-height:1.7;
 }
-.route-summary .dist{color:#0ea5e9;font-weight:700}
-.route-summary .timp{color:#38bdf8;font-size:0.92em}
+.route-summary .dist{color:var(--accent-primary);font-weight:700}
+.route-summary .timp{color:var(--accent-secondary);font-size:0.92em}
 table{width:100%;border-collapse:collapse;margin:18px 0}
-th{background:#1a1a2e;color:#0ea5e9;padding:12px 16px;text-align:left;font-weight:600;text-transform:uppercase;font-size:0.78em;letter-spacing:1.2px}
-td{padding:11px 16px;border-bottom:1px solid #1e3a5f;font-size:0.95em}
-tr:hover td{background:rgba(14,165,233,0.04)}
+th{
+    background:var(--bg-inner);color:var(--accent-primary);padding:12px 16px;
+    text-align:left;font-weight:600;text-transform:uppercase;
+    font-size:0.78em;letter-spacing:1.2px;
+}
+td{padding:11px 16px;border-bottom:1px solid var(--border-subtle);font-size:0.95em}
+tbody tr:nth-child(even) td{background:rgba(200,117,51,0.03)}
+tbody tr:nth-child(odd) td{background:transparent}
+tr:hover td{background:rgba(200,117,51,0.07)!important}
 .road-badge{display:inline-block;padding:3px 12px;border-radius:14px;font-size:0.82em;font-weight:700;color:#fff;margin-right:6px}
-.total-row{background:#1a1a2e;font-weight:700;font-size:1.05em}
-.total-row td{padding:15px 16px;color:#0ea5e9;border-bottom:none}
+.total-row{background:var(--bg-inner);font-weight:700;font-size:1.05em}
+.total-row td{padding:15px 16px;color:var(--accent-primary);border-bottom:none}
 
+/* ── Route List ── */
 .route-list{margin-top:16px}
 .route-item{
-    background:#1a1a2e;border-radius:10px;padding:13px 20px;margin-bottom:8px;
-    display:flex;align-items:center;border-left:4px solid #2c3e50;
-    transition:transform 0.15s,box-shadow 0.15s;
+    background:var(--bg-inner);border-radius:10px;padding:13px 20px;margin-bottom:8px;
+    display:flex;align-items:center;border-left:4px solid var(--text-dim);
+    transition:transform 0.15s,box-shadow 0.15s,background 0.2s;
+    cursor:default;
 }
 .route-item:hover{transform:translateX(4px);box-shadow:0 2px 12px rgba(0,0,0,0.2)}
+.route-item.highlight{background:rgba(200,117,51,0.12);box-shadow:0 2px 16px rgba(200,117,51,0.2)}
 .route-num{
-    background:#0ea5e9;color:#1a1a2e;width:30px;height:30px;border-radius:50%;
+    background:var(--accent-primary);color:var(--bg-deep);width:30px;height:30px;border-radius:50%;
     display:inline-flex;align-items:center;justify-content:center;
     font-weight:800;font-size:0.85em;margin-right:14px;flex-shrink:0;
 }
-.route-path{flex:1;font-size:0.93em;color:#cbd5e1}
-.route-path .arrow{color:#475569;margin:0 4px}
-.route-dist{color:#0ea5e9;font-weight:700;white-space:nowrap;margin-left:14px;font-size:0.95em}
-.route-more{text-align:center;color:#64748b;font-style:italic;padding:12px;font-size:0.9em}
+.route-path{flex:1;font-size:0.93em;color:var(--text-cream)}
+.route-path .arrow{color:var(--text-dim);margin:0 4px}
+.route-dist{color:var(--accent-primary);font-weight:700;white-space:nowrap;margin-left:14px;font-size:0.95em}
+.route-more{text-align:center;color:var(--text-muted);font-style:italic;padding:12px;font-size:0.9em}
 
-footer{
-    text-align:center;padding:28px 0;color:#475569;font-size:0.82em;
-    border-top:1px solid #1e3a5f;margin-top:8px;letter-spacing:0.3px;
+/* ── Donut Chart ── */
+.donut-container{
+    display:flex;align-items:center;gap:30px;margin:20px 0;
+    padding:20px;background:var(--bg-inner);border-radius:12px;
 }
-footer span{color:#0ea5e9}
-footer .sep{margin:0 8px;color:#2c3e50}
+.donut-chart{
+    width:140px;height:140px;border-radius:50%;position:relative;flex-shrink:0;
+}
+.donut-hole{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:80px;height:80px;border-radius:50%;background:var(--bg-inner);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Playfair Display',serif;font-size:0.85em;color:var(--accent-primary);
+    font-weight:700;text-align:center;line-height:1.2;
+}
+.donut-legend{display:flex;flex-direction:column;gap:8px}
+.donut-legend-item{display:flex;align-items:center;gap:10px;font-size:0.9em}
+.donut-legend-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}
 
+/* ── Footer ── */
+footer{
+    text-align:center;padding:32px 0;color:var(--text-muted);font-size:0.82em;
+    margin-top:8px;letter-spacing:0.3px;
+    animation:revealUp 0.7s ease-out 0.8s both;
+}
+footer .footer-line{
+    width:0;height:1px;margin:0 auto 16px;
+    background:linear-gradient(90deg,transparent,var(--accent-primary),var(--accent-secondary),transparent);
+    animation:drawLine 1s ease-out 1s forwards;
+}
+footer .footer-brand{
+    font-family:'Playfair Display',Georgia,serif;
+    font-size:1.3em;font-weight:700;
+    color:var(--accent-primary);
+    display:block;margin-bottom:6px;
+}
+footer .footer-timestamp{color:var(--text-dim);font-size:0.9em;margin-top:6px}
+footer span{color:var(--accent-primary)}
+footer .sep{margin:0 8px;color:var(--text-dim)}
+
+/* ── Responsive ── */
 @media(max-width:768px){
+    .container{padding:14px}
     .stats-row{grid-template-columns:repeat(2,1fr)}
     #map{height:350px}
+    header h1{font-size:1.8em}
+    .info-card{padding:20px}
+    .donut-container{flex-direction:column;align-items:flex-start}
+}
+@media(max-width:480px){
+    .stats-row{grid-template-columns:1fr}
+    #map{height:280px}
+    header h1{font-size:1.5em}
+    header p{font-size:0.85em;letter-spacing:1.5px}
+    .info-card{padding:16px 14px}
+    .route-item{padding:10px 14px;flex-wrap:wrap}
+    .route-dist{margin-left:0;margin-top:6px;width:100%;text-align:right}
+    .donut-chart{width:110px;height:110px}
+    .donut-hole{width:60px;height:60px;font-size:0.75em}
 }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="container" style="position:relative">
 )html";
 
     // ══════════════════════════════════
-    //  SECTIUNEA 2: HEADER
+    //  SECTIUNEA 2: HEADER with theme toggle
     // ══════════════════════════════════
+    fout << "<button class=\"theme-toggle\" id=\"themeToggle\" title=\"Comuta tema\">&#9789;</button>\n";
     fout << "<header>\n";
+    fout << "<span class=\"compass-ornament\">&#9678; &#9670; &#9678;</span>\n";
+    fout << "<div class=\"decorative-line\"></div>\n";
     fout << "<h1>&#127464;&#127482; Cuba Navigator</h1>\n";
     fout << "<p>Sistem de Navigare Inteligent</p>\n";
     fout << "</header>\n\n";
@@ -596,22 +878,59 @@ footer .sep{margin:0 8px;color:#2c3e50}
     //  SECTIUNEA 3: HARTA LEAFLET
     // ══════════════════════════════════
     fout << "<div class=\"map-card\">\n";
+    fout << "<button class=\"fullscreen-btn\" id=\"fullscreenBtn\" title=\"Fullscreen\">&#x26F6;</button>\n";
     fout << "<div id=\"map\"></div>\n";
     fout << "</div>\n\n";
 
     // Leaflet JavaScript — map init, markers, roads, routes
     fout << "<script>\n";
 
+    // Fullscreen toggle
+    fout << R"html(
+var mapEl=document.getElementById('map');
+var fsBtn=document.getElementById('fullscreenBtn');
+var isFullscreen=false;
+fsBtn.addEventListener('click',function(){
+    isFullscreen=!isFullscreen;
+    if(isFullscreen){
+        mapEl.classList.add('fullscreen-map');
+        fsBtn.style.position='fixed';fsBtn.style.top='12px';fsBtn.style.right='12px';fsBtn.style.zIndex='10001';
+        fsBtn.innerHTML='&#x2716;';
+    }else{
+        mapEl.classList.remove('fullscreen-map');
+        fsBtn.style.position='absolute';fsBtn.style.top='28px';fsBtn.style.right='28px';fsBtn.style.zIndex='5';
+        fsBtn.innerHTML='&#x26F6;';
+    }
+    setTimeout(function(){map.invalidateSize()},200);
+});
+)html";
+
     // Map setup with dual tile layers (dark + satellite)
+    fout << "var darkTileUrl='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';\n";
+    fout << "var lightTileUrl='https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';\n";
     fout << "var map=L.map('map',{center:[21.5,-79.5],zoom:7,zoomControl:true,scrollWheelZoom:true});\n";
-    fout << "var darkLayer=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{"
-         << "attribution:'\\u00a9 OpenStreetMap contributors \\u00a9 CARTO',maxZoom:19});\n";
+    fout << "var currentTileLayer=L.tileLayer(darkTileUrl,{"
+         << "attribution:'\\u00a9 OpenStreetMap contributors \\u00a9 CARTO',maxZoom:19}).addTo(map);\n";
     fout << "var satelliteLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{"
          << "attribution:'\\u00a9 Esri, Maxar, Earthstar Geographics',maxZoom:19});\n";
-    fout << "darkLayer.addTo(map);\n";
-    fout << "L.control.layers({'\\ud83c\\udf19 Dark':darkLayer,'\\ud83d\\udef0\\ufe0f Satelit':satelliteLayer},null,"
+    fout << "L.control.layers({'\\ud83c\\udf19 Dark':currentTileLayer,'\\ud83d\\udef0\\ufe0f Satelit':satelliteLayer},null,"
          << "{position:'topleft',collapsed:false}).addTo(map);\n";
     fout << "L.control.scale({metric:true,imperial:false,position:'bottomleft',maxWidth:150}).addTo(map);\n\n";
+
+    // Theme toggle JS
+    fout << R"html(
+var themeBtn=document.getElementById('themeToggle');
+var isLight=false;
+themeBtn.addEventListener('click',function(){
+    isLight=!isLight;
+    document.body.classList.toggle('light',isLight);
+    themeBtn.innerHTML=isLight?'&#9788;':'&#9789;';
+    map.removeLayer(currentTileLayer);
+    currentTileLayer=L.tileLayer(isLight?lightTileUrl:darkTileUrl,{
+        attribution:'\u00a9 OpenStreetMap contributors \u00a9 CARTO',maxZoom:19
+    }).addTo(map);
+});
+)html";
 
     // City coordinates array
     fout << "var cities=[\n";
@@ -635,15 +954,16 @@ footer .sep{margin:0 8px;color:#2c3e50}
             if (distanta[i][j] > 0) {
                 fout << "L.polyline([[" << fmt(latitudine[i], 4) << "," << fmt(longitudine[i], 4)
                      << "],[" << fmt(latitudine[j], 4) << "," << fmt(longitudine[j], 4)
-                     << "]],{color:'rgba(255,255,255,0.15)',weight:2,dashArray:'5,10'}).addTo(map);\n";
+                     << "]],{color:'rgba(200,117,51,0.1)',weight:2,dashArray:'5,10'}).addTo(map);\n";
             }
     fout << "\n";
 
     // Route drawing
     if (modMultiplu) {
-        // Multiple routes mode — up to 5 on map with layer control
+        // Multiple routes mode — up to 5 on map with layer control + hover highlights
         int nrPeHarta = (nrTrasee < 5) ? nrTrasee : 5;
         fout << "var overlays={};\n";
+        fout << "var routeLayerGroups=[];\n";
         for (int r = 0; r < nrPeHarta; r++) {
             string culoare = culoriMultiple[r % 5];
             string opac = (r == 0) ? "1.0" : "0.4";
@@ -664,68 +984,237 @@ footer .sep{margin:0 8px;color:#2c3e50}
                      << " | " << vitezaMax[c1][c2] << " km/h').addTo(rg" << r << ");\n";
             }
             fout << "rg" << r << ".addTo(map);\n";
+            fout << "routeLayerGroups.push({group:rg" << r << ",color:'" << culoare << "',origWeight:" << weight << ",origOpacity:" << opac << "});\n";
             fout << "overlays['Traseu " << (r + 1) << " (" << fmt(distanteTrasee[r], 0) << " km)']=rg" << r << ";\n";
         }
         fout << "L.control.layers(null,overlays,{collapsed:false,position:'bottomright',sortLayers:false}).addTo(map);\n\n";
+
+        // Hover highlight functions for multiple mode
+        fout << R"html(
+function highlightMapRoute(idx){
+    routeLayerGroups.forEach(function(rl,i){
+        rl.group.eachLayer(function(layer){
+            if(i===idx){
+                layer.setStyle({weight:7,opacity:1});
+            }else{
+                layer.setStyle({weight:2,opacity:0.15});
+            }
+        });
+    });
+}
+function resetMapRoutes(){
+    routeLayerGroups.forEach(function(rl){
+        rl.group.eachLayer(function(layer){
+            layer.setStyle({weight:rl.origWeight,opacity:parseFloat(rl.origOpacity)});
+        });
+    });
+}
+function highlightListItem(idx){
+    var items=document.querySelectorAll('.route-item');
+    items.forEach(function(el,i){
+        if(i===idx) el.classList.add('highlight');
+        else el.classList.remove('highlight');
+    });
+}
+function resetListItems(){
+    document.querySelectorAll('.route-item').forEach(function(el){
+        el.classList.remove('highlight');
+    });
+}
+)html";
+        // Attach map hover events to route layers
+        for (int r = 0; r < nrPeHarta; r++) {
+            fout << "rg" << r << ".eachLayer(function(layer){\n";
+            fout << "  layer.on('mouseover',function(){highlightMapRoute(" << r << ");highlightListItem(" << r << ");});\n";
+            fout << "  layer.on('mouseout',function(){resetMapRoutes();resetListItems();});\n";
+            fout << "});\n";
+        }
+        fout << "\n";
+
     } else if (traseuEvidentiiat >= 0 && traseuEvidentiiat < nrTrasee) {
-        // Single route mode — colored by road type with segment popups
+        // Single route mode — animated drawing with segments array
         int idx = traseuEvidentiiat;
         int nrSeg = lungimeTraseu[idx] - 1;
+
+        // Build segments array for animation
+        fout << "var segments=[\n";
         for (int i = 0; i < nrSeg; i++) {
             int c1 = trasee[idx][i];
             int c2 = trasee[idx][i + 1];
             string tip = tipDrum[c1][c2];
             string col = culoareDrum(tip);
             int w = (tip == "A") ? 5 : (tip == "CL") ? 3 : 4;
-            fout << "L.polyline([[" << fmt(latitudine[c1], 4) << "," << fmt(longitudine[c1], 4)
-                 << "],[" << fmt(latitudine[c2], 4) << "," << fmt(longitudine[c2], 4)
-                 << "]],{color:'" << col << "',weight:" << w
-                 << ",opacity:1}).bindPopup('<b>" << numeOrase[c1] << " \\u2192 " << numeOrase[c2]
-                 << "</b><br>" << distanta[c1][c2] << " km | " << getNumeTipDrum(tip)
-                 << " | " << vitezaMax[c1][c2] << " km/h').addTo(map);\n";
-        }
-
-        // Direction arrows along the route
-        fout << "var routeCoords=[";
-        for (int i = 0; i < lungimeTraseu[idx]; i++) {
-            int c = trasee[idx][i];
-            fout << "[" << fmt(latitudine[c], 4) << "," << fmt(longitudine[c], 4) << "]";
-            if (i < lungimeTraseu[idx] - 1) fout << ",";
+            fout << "  {lat1:" << fmt(latitudine[c1], 4) << ",lng1:" << fmt(longitudine[c1], 4)
+                 << ",lat2:" << fmt(latitudine[c2], 4) << ",lng2:" << fmt(longitudine[c2], 4)
+                 << ",color:'" << col << "',weight:" << w
+                 << ",name1:'" << numeOrase[c1] << "',name2:'" << numeOrase[c2] << "'"
+                 << ",dist:" << distanta[c1][c2]
+                 << ",tip:'" << getNumeTipDrum(tip) << "'"
+                 << ",viteza:" << vitezaMax[c1][c2]
+                 << "}";
+            if (i < nrSeg - 1) fout << ",";
+            fout << "\n";
         }
         fout << "];\n";
-        fout << "for(var i=0;i<routeCoords.length-1;i++){"
-             << "var a=routeCoords[i],b=routeCoords[i+1];"
-             << "var mid=[(a[0]+b[0])/2,(a[1]+b[1])/2];"
-             << "var ang=Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;"
-             << "var arrow=L.divIcon({className:'',html:'<div style=\"color:#fff;font-size:16px;transform:rotate('+(90-ang)+'deg);text-shadow:0 0 6px rgba(0,0,0,0.8)\">&#9650;</div>',iconSize:[16,16],iconAnchor:[8,8]});"
-             << "L.marker(mid,{icon:arrow,interactive:false}).addTo(map);}\n\n";
+
+        // Fly-to animation: start on source, fly to dest, then fitBounds
+        fout << "var srcCity=cities[src];\n";
+        fout << "var dstCity=cities[dst];\n";
+        fout << "map.setView([srcCity.lat,srcCity.lng],11);\n\n";
+
+        // Animated segment drawing
+        if (useGradient) {
+            // Gradient polylines: HSL green→red by progress
+            fout << R"html(
+var drawnLayers=[];
+var arrowLayers=[];
+var segIdx=0;
+function drawNextSegment(){
+    if(segIdx>=segments.length){
+        var allPts=segments.map(function(s){return [[s.lat1,s.lng1],[s.lat2,s.lng2]];}).flat();
+        setTimeout(function(){map.flyToBounds(L.latLngBounds(allPts).pad(0.15),{duration:1.5});},400);
+        return;
+    }
+    var s=segments[segIdx];
+    var progress=segIdx/(segments.length-1||1);
+    var hue=Math.round(120*(1-progress));
+    var gradColor='hsl('+hue+',70%,50%)';
+    var line=L.polyline([[s.lat1,s.lng1],[s.lat2,s.lng2]],{
+        color:gradColor,weight:s.weight,opacity:0
+    }).bindPopup('<b>'+s.name1+' \u2192 '+s.name2+'</b><br>'+s.dist+' km | '+s.tip+' | '+s.viteza+' km/h').addTo(map);
+    drawnLayers.push(line);
+    var startOpacity=0;
+    var fadeInterval=setInterval(function(){
+        startOpacity+=0.1;
+        if(startOpacity>=1){startOpacity=1;clearInterval(fadeInterval);}
+        line.setStyle({opacity:startOpacity});
+    },30);
+    // Direction arrow after segment draws
+    var mid=[(s.lat1+s.lat2)/2,(s.lng1+s.lng2)/2];
+    var ang=Math.atan2(s.lng2-s.lng1,s.lat2-s.lat1)*180/Math.PI;
+    var arrow=L.divIcon({className:'',html:'<div style="color:#fff;font-size:16px;transform:rotate('+(90-ang)+'deg);text-shadow:0 0 6px rgba(0,0,0,0.8)">&#9650;</div>',iconSize:[16,16],iconAnchor:[8,8]});
+    setTimeout(function(){
+        var am=L.marker(mid,{icon:arrow,interactive:false}).addTo(map);
+        arrowLayers.push(am);
+    },300);
+    if(segIdx===0){
+        setTimeout(function(){
+            map.flyTo([dstCity.lat,dstCity.lng],11,{duration:1.2});
+            setTimeout(function(){segIdx++;drawNextSegment();},1400);
+        },600);
+    }else{
+        segIdx++;
+        setTimeout(drawNextSegment,400);
+    }
+}
+setTimeout(function(){drawNextSegment();},800);
+)html";
+        } else {
+            // Road-type colored polylines with animation (option 3)
+            fout << R"html(
+var drawnLayers=[];
+var arrowLayers=[];
+var segIdx=0;
+function drawNextSegment(){
+    if(segIdx>=segments.length){
+        var allPts=segments.map(function(s){return [[s.lat1,s.lng1],[s.lat2,s.lng2]];}).flat();
+        setTimeout(function(){map.flyToBounds(L.latLngBounds(allPts).pad(0.15),{duration:1.5});},400);
+        return;
+    }
+    var s=segments[segIdx];
+    var line=L.polyline([[s.lat1,s.lng1],[s.lat2,s.lng2]],{
+        color:s.color,weight:s.weight,opacity:0
+    }).bindPopup('<b>'+s.name1+' \u2192 '+s.name2+'</b><br>'+s.dist+' km | '+s.tip+' | '+s.viteza+' km/h').addTo(map);
+    drawnLayers.push(line);
+    var startOpacity=0;
+    var fadeInterval=setInterval(function(){
+        startOpacity+=0.1;
+        if(startOpacity>=1){startOpacity=1;clearInterval(fadeInterval);}
+        line.setStyle({opacity:startOpacity});
+    },30);
+    // Direction arrow after segment draws
+    var mid=[(s.lat1+s.lat2)/2,(s.lng1+s.lng2)/2];
+    var ang=Math.atan2(s.lng2-s.lng1,s.lat2-s.lat1)*180/Math.PI;
+    var arrow=L.divIcon({className:'',html:'<div style="color:#fff;font-size:16px;transform:rotate('+(90-ang)+'deg);text-shadow:0 0 6px rgba(0,0,0,0.8)">&#9650;</div>',iconSize:[16,16],iconAnchor:[8,8]});
+    setTimeout(function(){
+        var am=L.marker(mid,{icon:arrow,interactive:false}).addTo(map);
+        arrowLayers.push(am);
+    },300);
+    if(segIdx===0){
+        setTimeout(function(){
+            map.flyTo([dstCity.lat,dstCity.lng],11,{duration:1.2});
+            setTimeout(function(){segIdx++;drawNextSegment();},1400);
+        },600);
+    }else{
+        segIdx++;
+        setTimeout(drawNextSegment,400);
+    }
+}
+setTimeout(function(){drawNextSegment();},800);
+)html";
+        }
     }
 
-    // City markers
-    fout << "var allCoords=[];\n";
-    fout << "cities.forEach(function(c,i){\n";
-    fout << "  allCoords.push([c.lat,c.lng]);\n";
-    fout << "  var isSrc=(i===src),isDst=(i===dst);\n";
-    fout << "  if(isSrc||isDst){\n";
-    fout << "    var col=isSrc?'#2ecc71':'#e74c3c';\n";
-    // Pulsating outer ring
-    fout << "    var pulseIcon=L.divIcon({className:'',html:'<div class=\"pulse-marker\" style=\"width:24px;height:24px;background:'+col+';opacity:0.4;border-radius:50%\"></div>',iconSize:[24,24],iconAnchor:[12,12]});\n";
-    fout << "    L.marker([c.lat,c.lng],{icon:pulseIcon,interactive:false}).addTo(map);\n";
-    // Solid inner circle
-    fout << "    L.circleMarker([c.lat,c.lng],{radius:10,color:'#fff',weight:2,fillColor:col,fillOpacity:1})"
-         << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
-         << ".bindTooltip(c.name,{permanent:true,direction:'top',offset:[0,-14]}).addTo(map);\n";
-    fout << "  } else {\n";
-    fout << "    var dx=tDir[i][0]*30,dy=tDir[i][1]*12;\n";
-    fout << "    var dir=dx>0?'right':'left';\n";
-    fout << "    L.circleMarker([c.lat,c.lng],{radius:6,color:'#1e293b',weight:1.5,fillColor:'#3498db',fillOpacity:0.8})"
-         << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
-         << ".bindTooltip(c.name,{permanent:true,direction:dir,offset:[dx/3,dy/3]}).addTo(map);\n";
-    fout << "  }\n";
-    fout << "});\n\n";
+    // City markers — in single mode use numbered markers for route cities
+    if (!modMultiplu && traseuEvidentiiat >= 0 && traseuEvidentiiat < nrTrasee) {
+        int idx = traseuEvidentiiat;
+        // Build route city set with step numbers
+        fout << "var routeSteps={};\n";
+        for (int i = 0; i < lungimeTraseu[idx]; i++) {
+            fout << "routeSteps[" << trasee[idx][i] << "]=" << (i + 1) << ";\n";
+        }
+        fout << "var allCoords=[];\n";
+        fout << "cities.forEach(function(c,i){\n";
+        fout << "  allCoords.push([c.lat,c.lng]);\n";
+        fout << "  var isSrc=(i===src),isDst=(i===dst);\n";
+        fout << "  var stepNum=routeSteps[i];\n";
+        fout << "  if(stepNum!==undefined){\n";
+        fout << "    var bgCol=isSrc?'#2ecc71':isDst?'#e74c3c':'var(--accent-primary,#c87533)';\n";
+        // Pulsating ring for src/dst
+        fout << "    if(isSrc||isDst){\n";
+        fout << "      var pulseIcon=L.divIcon({className:'',html:'<div class=\"pulse-marker\" style=\"width:24px;height:24px;background:'+bgCol+';opacity:0.4;border-radius:50%\"></div>',iconSize:[24,24],iconAnchor:[12,12]});\n";
+        fout << "      L.marker([c.lat,c.lng],{icon:pulseIcon,interactive:false}).addTo(map);\n";
+        fout << "    }\n";
+        // Numbered circle marker
+        fout << "    var numIcon=L.divIcon({className:'',html:'<div style=\"width:28px;height:28px;border-radius:50%;background:'+bgCol+';color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:Source Sans 3,sans-serif\">'+stepNum+'</div>',iconSize:[28,28],iconAnchor:[14,14]});\n";
+        fout << "    L.marker([c.lat,c.lng],{icon:numIcon})"
+             << ".bindPopup('<b>'+c.name+'</b><br>Pas '+stepNum+'<br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
+             << ".bindTooltip(c.name,{permanent:true,direction:'top',offset:[0,-18]}).addTo(map);\n";
+        fout << "  } else {\n";
+        fout << "    var dx=tDir[i][0]*30,dy=tDir[i][1]*12;\n";
+        fout << "    var dir=dx>0?'right':'left';\n";
+        fout << "    L.circleMarker([c.lat,c.lng],{radius:5,color:'#1e293b',weight:1.5,fillColor:'rgba(200,117,51,0.5)',fillOpacity:0.6})"
+             << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
+             << ".bindTooltip(c.name,{permanent:true,direction:dir,offset:[dx/3,dy/3]}).addTo(map);\n";
+        fout << "  }\n";
+        fout << "});\n\n";
+    } else {
+        // Standard markers for multiple mode
+        fout << "var allCoords=[];\n";
+        fout << "cities.forEach(function(c,i){\n";
+        fout << "  allCoords.push([c.lat,c.lng]);\n";
+        fout << "  var isSrc=(i===src),isDst=(i===dst);\n";
+        fout << "  if(isSrc||isDst){\n";
+        fout << "    var col=isSrc?'#2ecc71':'#e74c3c';\n";
+        fout << "    var pulseIcon=L.divIcon({className:'',html:'<div class=\"pulse-marker\" style=\"width:24px;height:24px;background:'+col+';opacity:0.4;border-radius:50%\"></div>',iconSize:[24,24],iconAnchor:[12,12]});\n";
+        fout << "    L.marker([c.lat,c.lng],{icon:pulseIcon,interactive:false}).addTo(map);\n";
+        fout << "    L.circleMarker([c.lat,c.lng],{radius:10,color:'#fff',weight:2,fillColor:col,fillOpacity:1})"
+             << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
+             << ".bindTooltip(c.name,{permanent:true,direction:'top',offset:[0,-14]}).addTo(map);\n";
+        fout << "  } else {\n";
+        fout << "    var dx=tDir[i][0]*30,dy=tDir[i][1]*12;\n";
+        fout << "    var dir=dx>0?'right':'left';\n";
+        fout << "    L.circleMarker([c.lat,c.lng],{radius:6,color:'#1e293b',weight:1.5,fillColor:'#c87533',fillOpacity:0.8})"
+             << ".bindPopup('<b>'+c.name+'</b><br>'+c.lat+', '+c.lng+'<br>'+c.conn+' conexiuni')"
+             << ".bindTooltip(c.name,{permanent:true,direction:dir,offset:[dx/3,dy/3]}).addTo(map);\n";
+        fout << "  }\n";
+        fout << "});\n\n";
+    }
 
-    // Fit bounds
-    fout << "map.fitBounds(L.latLngBounds(allCoords).pad(0.1));\n\n";
+    // Fit bounds — multiple mode uses fitBounds immediately, single mode handled in animation
+    if (modMultiplu) {
+        fout << "map.fitBounds(L.latLngBounds(allCoords).pad(0.1));\n\n";
+    }
 
     // Legend as Leaflet control
     fout << "var legend=L.control({position:'topright'});\n";
@@ -733,10 +1222,10 @@ footer .sep{margin:0 8px;color:#2c3e50}
     fout << "  var d=L.DomUtil.create('div');\n";
     fout << "  d.innerHTML='";
 
-    // Legend inner HTML
-    fout << "<div style=\"background:rgba(22,33,62,0.92);padding:15px;border-radius:10px;color:#e0e0e0;font-size:13px;border:1px solid #2a3a5c;box-shadow:0 4px 20px rgba(0,0,0,0.35);backdrop-filter:blur(8px)\">";
+    // Legend inner HTML — glassmorphism styled
+    fout << "<div style=\"background:rgba(10,26,31,0.88);padding:15px;border-radius:10px;color:var(--text-cream,#f5e6d0);font-size:13px;border:1px solid rgba(200,117,51,0.2);box-shadow:0 4px 20px rgba(0,0,0,0.35);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);font-family:Source Sans 3,sans-serif\">";
     if (modMultiplu) {
-        fout << "<div style=\"font-weight:bold;color:#0ea5e9;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px\">TRASEE</div>";
+        fout << "<div style=\"font-weight:bold;color:#c87533;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;font-family:Playfair Display,serif\">TRASEE</div>";
         int nrLegenda = (nrTrasee < 5) ? nrTrasee : 5;
         for (int i = 0; i < nrLegenda; i++) {
             fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\">"
@@ -745,13 +1234,13 @@ footer .sep{margin:0 8px;color:#2c3e50}
                  << "Traseu " << (i + 1) << " (" << fmt(distanteTrasee[i], 0) << " km)</div>";
         }
     } else {
-        fout << "<div style=\"font-weight:bold;color:#0ea5e9;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px\">TIPURI DE DRUM</div>";
-        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:4px;border-radius:2px;margin-right:10px;background:#e74c3c\"></div>A \\u2014 Autopista (100 km/h)</div>";
-        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:3px;border-radius:2px;margin-right:10px;background:#3498db\"></div>CN \\u2014 Carretera Nacional (80 km/h)</div>";
-        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:3px;border-radius:2px;margin-right:10px;background:#f39c12\"></div>CR \\u2014 Carretera Regional (60 km/h)</div>";
-        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:2px;border-radius:2px;margin-right:10px;background:#95a5a6\"></div>CL \\u2014 Carretera Local (40 km/h)</div>";
+        fout << "<div style=\"font-weight:bold;color:#c87533;margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;font-family:Playfair Display,serif\">TIPURI DE DRUM</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:4px;border-radius:2px;margin-right:10px;background:#c45a4a\"></div>A \\u2014 Autopista (100 km/h)</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:3px;border-radius:2px;margin-right:10px;background:#4a8ab5\"></div>CN \\u2014 Carretera Nacional (80 km/h)</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:3px;border-radius:2px;margin-right:10px;background:#d4944a\"></div>CR \\u2014 Carretera Regional (60 km/h)</div>";
+        fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:30px;height:2px;border-radius:2px;margin-right:10px;background:#7a8a7a\"></div>CL \\u2014 Carretera Local (40 km/h)</div>";
     }
-    fout << "<div style=\"border-top:1px solid #2c3e50;margin:8px 0 6px\"></div>";
+    fout << "<div style=\"border-top:1px solid rgba(200,117,51,0.2);margin:8px 0 6px\"></div>";
     fout << "<div style=\"display:flex;align-items:center;margin-bottom:6px\"><div style=\"width:12px;height:12px;border-radius:50%;margin-right:10px;background:#2ecc71;border:2px solid #fff\"></div>Plecare</div>";
     fout << "<div style=\"display:flex;align-items:center\"><div style=\"width:12px;height:12px;border-radius:50%;margin-right:10px;background:#e74c3c;border:2px solid #fff\"></div>Destinatie</div>";
     fout << "</div>';\n";
@@ -766,18 +1255,18 @@ footer .sep{margin:0 8px;color:#2c3e50}
     fout << "var compass=L.control({position:'topright'});\n";
     fout << "compass.onAdd=function(){\n";
     fout << "  var d=L.DomUtil.create('div');\n";
-    fout << "  d.innerHTML='<div style=\"background:rgba(22,33,62,0.9);border-radius:50%;width:60px;height:60px;"
-         << "display:flex;align-items:center;justify-content:center;border:2px solid #2a3a5c;margin-top:10px\">"
+    fout << "  d.innerHTML='<div style=\"background:rgba(10,26,31,0.9);border-radius:50%;width:60px;height:60px;"
+         << "display:flex;align-items:center;justify-content:center;border:2px solid rgba(200,117,51,0.25);margin-top:10px\">"
          << "<div style=\"position:relative;width:40px;height:40px\">"
-         << "<div style=\"position:absolute;top:0;left:50%;transform:translateX(-50%);color:#e74c3c;font-weight:bold;font-size:14px\">N</div>"
-         << "<div style=\"position:absolute;bottom:0;left:50%;transform:translateX(-50%);color:#8892a0;font-size:10px\">S</div>"
-         << "<div style=\"position:absolute;left:0;top:50%;transform:translateY(-50%);color:#8892a0;font-size:10px\">V</div>"
-         << "<div style=\"position:absolute;right:0;top:50%;transform:translateY(-50%);color:#8892a0;font-size:10px\">E</div>"
+         << "<div style=\"position:absolute;top:0;left:50%;transform:translateX(-50%);color:#c45a4a;font-weight:bold;font-size:14px;font-family:Playfair Display,serif\">N</div>"
+         << "<div style=\"position:absolute;bottom:0;left:50%;transform:translateX(-50%);color:#8a9a8a;font-size:10px\">S</div>"
+         << "<div style=\"position:absolute;left:0;top:50%;transform:translateY(-50%);color:#8a9a8a;font-size:10px\">V</div>"
+         << "<div style=\"position:absolute;right:0;top:50%;transform:translateY(-50%);color:#8a9a8a;font-size:10px\">E</div>"
          << "<div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)\">"
          << "<div style=\"width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;"
-         << "border-bottom:15px solid #e74c3c;position:absolute;top:-15px;left:-5px\"></div>"
+         << "border-bottom:15px solid #c45a4a;position:absolute;top:-15px;left:-5px\"></div>"
          << "<div style=\"width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;"
-         << "border-top:15px solid #8892a0;position:absolute;top:0;left:-5px\"></div>"
+         << "border-top:15px solid #8a9a8a;position:absolute;top:0;left:-5px\"></div>"
          << "</div></div></div>';\n";
     fout << "  return d;\n";
     fout << "};\n";
@@ -816,17 +1305,24 @@ footer .sep{margin:0 8px;color:#2c3e50}
          << " &#8594; " << numeOrase[destinatia] << "</h2>\n";
 
     if (modMultiplu) {
-        fout << "<p style=\"color:#94a3b8;margin-bottom:16px\">S-au gasit <strong style=\"color:#0ea5e9\">"
+        fout << "<p style=\"color:var(--text-muted);margin-bottom:16px\">S-au gasit <strong style=\"color:var(--accent-primary)\">"
              << nrTrasee << "</strong> trasee posibile (sortate dupa distanta)</p>\n";
         if (nrTrasee > 5) {
-            fout << "<p style=\"color:#64748b;margin-bottom:12px;font-size:0.9em\">"
+            fout << "<p style=\"color:var(--text-dim);margin-bottom:12px;font-size:0.9em\">"
                  << "Pe harta sunt afisate primele 5 trasee. Folositi controlul de straturi din dreapta-jos pentru a le activa/dezactiva.</p>\n";
         }
         fout << "<div class=\"route-list\">\n";
         int nrAfis = (nrTrasee < 30) ? nrTrasee : 30;
+        int nrPeHarta = (nrTrasee < 5) ? nrTrasee : 5;
         for (int i = 0; i < nrAfis; i++) {
-            string borderCol = (i < 5) ? culoriMultiple[i % 5] : "#2c3e50";
-            fout << "<div class=\"route-item\" style=\"border-left-color:" << borderCol << "\">"
+            string borderCol = (i < 5) ? culoriMultiple[i % 5] : "#5a6a5a";
+            fout << "<div class=\"route-item\" data-route=\"" << i << "\" style=\"border-left-color:" << borderCol << "\"";
+            // Hover events for items on the map (first 5)
+            if (i < nrPeHarta) {
+                fout << " onmouseover=\"highlightMapRoute(" << i << ");this.classList.add('highlight');\""
+                     << " onmouseout=\"resetMapRoutes();this.classList.remove('highlight');\"";
+            }
+            fout << ">"
                  << "<span class=\"route-num\">" << (i + 1) << "</span>"
                  << "<span class=\"route-path\">";
             for (int j = 0; j < lungimeTraseu[i]; j++) {
@@ -881,14 +1377,51 @@ footer .sep{margin:0 8px;color:#2c3e50}
                  << "<td>" << formateazaTimp(timpSeg) << "</td>"
                  << "</tr>\n";
         }
-        fout << "</tbody>\n";
         fout << "<tr class=\"total-row\">"
              << "<td colspan=\"3\">TOTAL</td>"
              << "<td>" << fmt(distanteTrasee[idx], 0) << " km</td>"
              << "<td colspan=\"2\"></td>"
              << "<td>" << formateazaTimp(timpTrasee[idx]) << "</td>"
              << "</tr>\n";
+        fout << "</tbody>\n";
         fout << "</table>\n";
+
+        // Donut chart for road type distribution (single mode)
+        if (kmTotal > 0) {
+            double degA = pctA * 3.6;
+            double degCN = pctCN * 3.6;
+            double degCR = pctCR * 3.6;
+            (void)pctCL; // used implicitly as remainder in conic-gradient
+
+            double endA = degA;
+            double endCN = endA + degCN;
+            double endCR = endCN + degCR;
+
+            fout << "<div class=\"donut-container\">\n";
+            fout << "<div class=\"donut-chart\" style=\"background:conic-gradient("
+                 << "#c45a4a 0deg " << fmt(endA, 1) << "deg,"
+                 << "#4a8ab5 " << fmt(endA, 1) << "deg " << fmt(endCN, 1) << "deg,"
+                 << "#d4944a " << fmt(endCN, 1) << "deg " << fmt(endCR, 1) << "deg,"
+                 << "#7a8a7a " << fmt(endCR, 1) << "deg 360deg"
+                 << ")\">\n";
+            fout << "<div class=\"donut-hole\">" << fmt(kmTotal, 0) << "<br>km</div>\n";
+            fout << "</div>\n";
+            fout << "<div class=\"donut-legend\">\n";
+            if (pctA > 0)
+                fout << "<div class=\"donut-legend-item\"><div class=\"donut-legend-swatch\" style=\"background:#c45a4a\"></div>"
+                     << "Autopista: " << fmt(kmA, 0) << " km (" << fmt(pctA, 1) << "%)</div>\n";
+            if (pctCN > 0)
+                fout << "<div class=\"donut-legend-item\"><div class=\"donut-legend-swatch\" style=\"background:#4a8ab5\"></div>"
+                     << "Carretera Nacional: " << fmt(kmCN, 0) << " km (" << fmt(pctCN, 1) << "%)</div>\n";
+            if (pctCR > 0)
+                fout << "<div class=\"donut-legend-item\"><div class=\"donut-legend-swatch\" style=\"background:#d4944a\"></div>"
+                     << "Carretera Regional: " << fmt(kmCR, 0) << " km (" << fmt(pctCR, 1) << "%)</div>\n";
+            if (pctCL > 0)
+                fout << "<div class=\"donut-legend-item\"><div class=\"donut-legend-swatch\" style=\"background:#7a8a7a\"></div>"
+                     << "Carretera Local: " << fmt(kmCL, 0) << " km (" << fmt(pctCL, 1) << "%)</div>\n";
+            fout << "</div>\n";
+            fout << "</div>\n";
+        }
     }
 
     fout << "</div>\n\n";
@@ -896,15 +1429,17 @@ footer .sep{margin:0 8px;color:#2c3e50}
     // ══════════════════════════════════
     //  SECTIUNEA 6: FOOTER
     // ══════════════════════════════════
-    fout << R"html(<footer>
-<span>Cuba Navigator</span> v2.2 &mdash; Proiect Backtracking C++
-<span class="sep">|</span> Algoritm: Backtracking Iterativ
-<span class="sep">|</span> Harta: Leaflet.js + OpenStreetMap
-</footer>
-</div>
-</body>
-</html>
-)html";
+    fout << "<footer>\n";
+    fout << "<div class=\"footer-line\"></div>\n";
+    fout << "<span class=\"footer-brand\">Cuba Navigator</span>\n";
+    fout << "v3.0 &mdash; Proiect Backtracking C++\n";
+    fout << "<span class=\"sep\">|</span> Algoritm: Backtracking Iterativ\n";
+    fout << "<span class=\"sep\">|</span> Harta: Leaflet.js + OpenStreetMap\n";
+    fout << "<div class=\"footer-timestamp\">Generat: " << timestamp << "</div>\n";
+    fout << "</footer>\n";
+    fout << "</div>\n";
+    fout << "</body>\n";
+    fout << "</html>\n";
 
     fout.close();
 }
@@ -958,7 +1493,7 @@ int main() {
             }
 
             cout << endl;
-            cout << YELLOW << "  Se calculeaza traseele..." << RESET << endl;
+            afiseazaSpinner("Se calculeaza traseele...");
             auto start = chrono::high_resolution_clock::now();
             BKT();
             sortTrasee();
@@ -1001,7 +1536,7 @@ int main() {
             }
 
             cout << endl;
-            cout << YELLOW << "  Se calculeaza traseele..." << RESET << endl;
+            afiseazaSpinner("Se calculeaza traseele...");
             auto start = chrono::high_resolution_clock::now();
             BKT();
             sortTrasee();
@@ -1056,7 +1591,7 @@ int main() {
             }
 
             cout << endl;
-            cout << YELLOW << "  Se calculeaza traseele..." << RESET << endl;
+            afiseazaSpinner("Se calculeaza traseele...");
             auto start = chrono::high_resolution_clock::now();
             BKT();
             sortTrasee();
@@ -1133,7 +1668,7 @@ int main() {
             }
 
             cout << endl;
-            cout << YELLOW << "  Se calculeaza traseele..." << RESET << endl;
+            afiseazaSpinner("Se calculeaza traseele...");
             auto start = chrono::high_resolution_clock::now();
             BKT();
             sortTrasee();
@@ -1161,9 +1696,9 @@ int main() {
                 cout << endl;
                 double distKm = distanteTrasee[0];
                 cout << BOLD << "  Comparatie moduri de transport:" << RESET << endl;
-                cout << "  " << CYAN  << "Cu masina (viteza max): " << formateazaTimp(timpTrasee[0]) << RESET << endl;
-                cout << "  " << GREEN << "Cu bicicleta (15 km/h): " << formateazaTimp(distKm / 15.0) << RESET << endl;
-                cout << "  " << YELLOW << "Pe jos (5 km/h):        " << formateazaTimp(distKm / 5.0) << RESET << endl;
+                cout << "  \xF0\x9F\x9A\x97 " << CYAN  << "Cu masina (viteza max): " << formateazaTimp(timpTrasee[0]) << RESET << endl;
+                cout << "  \xF0\x9F\x9A\xB4 " << GREEN << "Cu bicicleta (15 km/h): " << formateazaTimp(distKm / 15.0) << RESET << endl;
+                cout << "  \xF0\x9F\x9A\xB6 " << YELLOW << "Pe jos (5 km/h):        " << formateazaTimp(distKm / 5.0) << RESET << endl;
 
                 // Generare HTML
                 genereazaHTML("Timpul de parcurgere", 0);
